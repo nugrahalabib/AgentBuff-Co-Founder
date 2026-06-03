@@ -20,8 +20,13 @@ export interface CredentialStore {
   listForUser(userId: string): Promise<StoredCredential[]>;
 }
 
+/** A credential store that also supports linking/replacing a credential. */
+export interface UpsertableCredentialStore extends CredentialStore {
+  upsert(cred: StoredCredential): void | Promise<void>;
+}
+
 /** In-memory store for tests/dev; the Prisma-backed store implements the same interface. */
-export class InMemoryCredentialStore implements CredentialStore {
+export class InMemoryCredentialStore implements UpsertableCredentialStore {
   private readonly creds: StoredCredential[];
   constructor(initial: StoredCredential[] = []) {
     this.creds = [...initial];

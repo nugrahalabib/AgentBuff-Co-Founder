@@ -16,6 +16,7 @@ export async function POST(req: Request): Promise<Response> {
   if (idea === undefined || idea === "") {
     return withSession({ error: "Ceritakan ide bisnismu dulu." }, s, { status: 400 });
   }
+  await app.ensureUser(s.userId);
   const project = await app.projects.create({
     ownerUserId: s.userId,
     ideaText: idea,

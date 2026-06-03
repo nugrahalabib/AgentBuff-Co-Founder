@@ -4,19 +4,30 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/ui/button";
 
-type Provider = "gemini" | "openai";
+type Provider = "gemini" | "openai" | "openai_codex";
 type Status = "idle" | "validating" | "valid" | "error";
 
-const GUIDE: Record<Provider, { label: string; hint: string; url: string }> = {
+const GUIDE: Record<Provider, { label: string; hint: string; url: string; site: string; placeholder: string }> = {
   gemini: {
     label: "Gemini API key",
     hint: "Paling ramah pemula — free tier Google dermawan. Disarankan.",
     url: "https://aistudio.google.com/apikey",
+    site: "Google AI Studio",
+    placeholder: "AIza…",
   },
   openai: {
     label: "OpenAI API key",
     hint: "Usage-based via OpenAI Platform (Responses API).",
     url: "https://platform.openai.com/api-keys",
+    site: "OpenAI Platform",
+    placeholder: "sk-…",
+  },
+  openai_codex: {
+    label: "Codex — Sign in with ChatGPT",
+    hint: "Pakai langganan ChatGPT-mu via token Codex (jalankan `codex login`, lalu tempel access token-nya).",
+    url: "https://developers.openai.com/codex/",
+    site: "dokumentasi Codex",
+    placeholder: "access token Codex / ChatGPT",
   },
 };
 
@@ -79,7 +90,7 @@ export default function OnboardingPage() {
       </p>
 
       {/* Provider selector */}
-      <div className="mt-6 grid grid-cols-2 gap-2">
+      <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {(Object.keys(GUIDE) as Provider[]).map((p) => (
           <button
             key={p}
@@ -104,13 +115,13 @@ export default function OnboardingPage() {
         rel="noopener noreferrer"
         className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
       >
-        Buka halaman {provider === "gemini" ? "Google AI Studio" : "OpenAI"} untuk membuat key ↗
+        Buka {guide.site} untuk membuat {provider === "openai_codex" ? "/menyalin token" : "key"} ↗
       </a>
 
       {/* Paste field */}
       <div className="mt-4">
         <label className="text-sm font-medium" htmlFor="apikey">
-          Tempel API key
+          Tempel API key / token
         </label>
         <div className="mt-1.5 flex gap-2">
           <input
@@ -118,7 +129,7 @@ export default function OnboardingPage() {
             type={show ? "text" : "password"}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={provider === "gemini" ? "AIza…" : "sk-…"}
+            placeholder={guide.placeholder}
             autoComplete="off"
             className="h-12 flex-1 rounded-xl border border-border bg-surface px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
           />

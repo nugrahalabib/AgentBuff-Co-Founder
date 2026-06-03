@@ -24,6 +24,8 @@
 | **Real BYOK validation route** (`/api/byok/validate` → adapter.validateCredential, key in-memory only) | §9.1.4 | [src/app/api/byok/validate/](../src/app/api/byok/validate/) | builds |
 | **No-DB runtime + signed-cookie session** (in-memory repos on globalThis; BYOK key linked & encrypted per session) | §10.1, §9.1 | [src/server/runtime.ts](../src/server/runtime.ts), [session.ts](../src/server/session.ts) | session tests |
 | **Real end-to-end AI flow** — link key → create project → **grounded validate + plan generate** with your BYOK provider | §9.1–§9.3 | [src/app/api/projects/](../src/app/api/projects/), [src/app/project/](../src/app/project/) | builds; live calls need a key |
+| **PostgreSQL persistence (Prisma)** — runtime auto-switches to Postgres when `DATABASE_URL` set; isolated DB on the VPS | §10.3, §11 | [src/server/db/](../src/server/db/), [src/server/runtime.ts](../src/server/runtime.ts) | **verified: project persisted to Postgres** |
+| **Codex (Sign in with ChatGPT)** — 3rd BYOK provider (`oauth_token`), validated via Responses API | §12.16 | onboarding + [src/app/api/byok/link/](../src/app/api/byok/link/) | builds |
 | **Model routing** (config-only model IDs, per task×provider) | §12.2 | [src/lib/ai/model-routing.ts](../src/lib/ai/model-routing.ts) | — |
 | **Document Skills** (proposal A4 / pitch-deck 16:9, slot-filled, numbers bound) | §9.5 | [.claude/skills/](../.claude/skills/) | — |
 
@@ -35,7 +37,8 @@
 | Provider methods: Deep Research (Interactions/o3), image gen (Nano Banana/gpt-image), doc/vision | §12.8, §12.10–11, §12.15 | 🟡 | stubs throw 501 with the exact doc refs; need a live key to verify |
 | Doc render → PDF (HTML/CSS + Paged.js → headless Chromium worker) | §9.5.2 | ⛔ | slot-assembly logic testable; Chromium render needs the worker |
 | UI deepening: research→real grounded view, planner wizard polish, brand/docs wired to services | §14 | 🟡 | all 6 modules have a UI now; Validasi (deterministic scoring) + Calculator are fully functional; Brand/Docs are scaffolds pending their services |
-| Auth (Google OIDC) + session + SSO/Webhook federation; Prisma-backed repos wired to Postgres/Redis/S3 | §9.1, §10.3 | ⛔ | needs Google client + DB/Redis/S3 endpoints (interfaces ready) |
+| Google OIDC login (Auth.js) + SSO/Webhook federation | §9.1 | ⛔ | needs Google client id/secret — see [AUTH-SETUP.md](AUTH-SETUP.md) |
+| Redis (BullMQ async jobs) + S3 object storage | §10.3 | ⛔ | for long jobs & artifact storage |
 
 ## What "needs infra/credentials" means
 These are built (or will be) behind interfaces with in-memory/test implementations, so the logic is unit-tested now and goes live by swapping the implementation once you provide: a Google OAuth client, a Postgres/Redis/S3 endpoint, a KMS key, and (per BYOK) the app never needs an LLM key itself — users bring their own. Nothing here blocks the deterministic core, which is the trust moat and is complete.

@@ -1,34 +1,38 @@
 // src/server/runtime.ts
-// No-DB runtime container so the app runs with ZERO infra setup (in-memory repos + a generated KEK).
-// Data lives in-process (resets on restart) — perfect for local use & testing. Swap the in-memory
-// repos/credential store for Prisma-backed ones in prod without touching services. PRD §10.1.
-// Cached on globalThis so Next.js hot-reload doesn't wipe data between requests.
+// App runtime container. Auto-selects persistence:
+//   • DATABASE_URL set  → Prisma-backed repos + credential store (Postgres).
+//   • otherwise         → in-memory (zero-setup; data resets on restart).
+// Either way the services/registry are identical. Cached on globalThis for dev hot-reload. PRD §10.1.
 
 import { randomUUID } from "node:crypto";
 import { LocalMasterKey } from "@/lib/crypto";
-import { InMemoryCredentialStore } from "@/lib/ai/credential-store";
+import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
-import { InMemoryRepository } from "@/server/domain/repositories";
+import { InMemoryRepository, type Repository } from "@/server/domain/repositories";
 import type { BusinessPlan, Project, ResearchReport } from "@/server/domain/types";
 import { ProjectService } from "@/server/services/project-service";
 import { ResearchService } from "@/server/services/research-service";
 import { PlannerService } from "@/server/services/planner-service";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
+import { createPrismaPersistence } from "@/server/db/prisma-repositories";
 
 export interface AppRuntime {
   master: LocalMasterKey;
-  credentials: InMemoryCredentialStore;
+  credentials: UpsertableCredentialStore;
   registry: DefaultProviderRegistry;
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
   mcp: McpToolRegistry;
   repos: {
-    projects: InMemoryRepository<Project>;
-    reports: InMemoryRepository<ResearchReport>;
-    plans: InMemoryRepository<BusinessPlan>;
+    projects: Repository<Project>;
+    reports: Repository<ResearchReport>;
+    plans: Repository<BusinessPlan>;
   };
+  /** Ensure the (guest) User row exists before creating FK-constrained rows. No-op in memory mode. */
+  ensureUser: (userId: string) => Promise<void>;
+  persistence: "postgres" | "memory";
 }
 
 function createRuntime(): AppRuntime {
@@ -36,12 +40,30 @@ function createRuntime(): AppRuntime {
     ? LocalMasterKey.fromBase64(process.env.BYOK_MASTER_KEY_BASE64)
     : LocalMasterKey.generate();
 
-  const credentials = new InMemoryCredentialStore();
-  const projects = new InMemoryRepository<Project>();
-  const reports = new InMemoryRepository<ResearchReport>();
-  const plans = new InMemoryRepository<BusinessPlan>();
-  const registry = new DefaultProviderRegistry(credentials, master);
+  const usePostgres = typeof process.env.DATABASE_URL === "string" && process.env.DATABASE_URL.length > 0;
 
+  let credentials: UpsertableCredentialStore;
+  let projectsRepo: Repository<Project>;
+  let reportsRepo: Repository<ResearchReport>;
+  let plansRepo: Repository<BusinessPlan>;
+  let ensureUser: (userId: string) => Promise<void>;
+
+  if (usePostgres) {
+    const p = createPrismaPersistence();
+    credentials = p.credentials;
+    projectsRepo = p.projects;
+    reportsRepo = p.reports;
+    plansRepo = p.plans;
+    ensureUser = p.ensureUser;
+  } else {
+    credentials = new InMemoryCredentialStore();
+    projectsRepo = new InMemoryRepository<Project>();
+    reportsRepo = new InMemoryRepository<ResearchReport>();
+    plansRepo = new InMemoryRepository<BusinessPlan>();
+    ensureUser = async () => {};
+  }
+
+  const registry = new DefaultProviderRegistry(credentials, master);
   const idGen = (): string => randomUUID();
   const now = (): string => new Date().toISOString();
 
@@ -49,11 +71,13 @@ function createRuntime(): AppRuntime {
     master,
     credentials,
     registry,
-    projects: new ProjectService({ projects, research: reports, plans, idGen, now }),
-    research: new ResearchService({ reports, registry, idGen, now }),
-    planner: new PlannerService({ plans, registry, idGen, now }),
+    projects: new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, idGen, now }),
+    research: new ResearchService({ reports: reportsRepo, registry, idGen, now }),
+    planner: new PlannerService({ plans: plansRepo, registry, idGen, now }),
     mcp: buildToolRegistry(),
-    repos: { projects, reports, plans },
+    repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo },
+    ensureUser,
+    persistence: usePostgres ? "postgres" : "memory",
   };
 }
 

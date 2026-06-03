@@ -152,6 +152,37 @@ export class OpenAIAdapter implements LLMProvider {
   async validateCredential(
     cred: Credential,
   ): Promise<{ ok: boolean; capabilities: Capabilities; detail?: string }> {
+    // GPT Image requires API Organization Verification; assume off until proven. PRD §12.14.4, §12.15.
+    const fullCaps: Capabilities = {
+      groundedSearch: true,
+      deepResearch: true,
+      imageGen: false,
+      vision: true,
+      docUnderstanding: true,
+      docAgentCli: true,
+    };
+    const noCaps: Capabilities = {
+      groundedSearch: false,
+      deepResearch: false,
+      imageGen: false,
+      vision: false,
+      docUnderstanding: false,
+      docAgentCli: false,
+    };
+
+    // Codex / "Sign in with ChatGPT" (oauth_token): validate via a minimal Responses API call,
+    // since OAuth tokens may not work against the platform models endpoint. PRD §12.16.
+    if (cred.type === "oauth_token") {
+      try {
+        await this.responses(cred, { model: requireModel("parse_fast"), input: "ping", max_output_tokens: 16 });
+        return { ok: true, capabilities: fullCaps };
+      } catch (e) {
+        if (e instanceof OpenAIApiError && e.transient) throw e;
+        return { ok: false, capabilities: noCaps, detail: "Token Codex/ChatGPT ditolak atau tidak kompatibel dengan API ini." };
+      }
+    }
+
+    // API key: cheap models-list probe.
     let res: Response;
     try {
       res = await fetch(`${OPENAI_BASE}/models`, {
@@ -163,28 +194,8 @@ export class OpenAIAdapter implements LLMProvider {
     }
 
     const outcome = classifyValidationStatus(res.status);
-    const capabilities: Capabilities = {
-      groundedSearch: true,
-      deepResearch: true,
-      // GPT Image requires API Organization Verification; assume off until proven. PRD §12.14.4, §12.15.
-      imageGen: false,
-      vision: true,
-      docUnderstanding: true,
-      docAgentCli: true,
-    };
-
-    if (outcome.kind === "ok") return { ok: true, capabilities };
-    if (outcome.kind === "rejected") {
-      const empty: Capabilities = {
-        groundedSearch: false,
-        deepResearch: false,
-        imageGen: false,
-        vision: false,
-        docUnderstanding: false,
-        docAgentCli: false,
-      };
-      return { ok: false, capabilities: empty, detail: outcome.detail };
-    }
+    if (outcome.kind === "ok") return { ok: true, capabilities: fullCaps };
+    if (outcome.kind === "rejected") return { ok: false, capabilities: noCaps, detail: outcome.detail };
     throw new OpenAIApiError(outcome.detail, res.status, true);
   }
 

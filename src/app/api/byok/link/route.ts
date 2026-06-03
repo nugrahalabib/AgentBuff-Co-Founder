@@ -8,7 +8,12 @@ import { encryptSecret, fingerprint } from "@/lib/crypto";
 import { app } from "@/server/runtime";
 import { sessionUser, withSession } from "@/server/api-helpers";
 
-const adapters = { gemini: () => new GeminiAdapter(), openai: () => new OpenAIAdapter() } as const;
+const adapters = {
+  gemini: () => new GeminiAdapter(),
+  openai: () => new OpenAIAdapter(),
+  // Codex (Sign in with ChatGPT) speaks the OpenAI Responses surface; auth is an OAuth token. PRD §12.16.
+  openai_codex: () => new OpenAIAdapter(),
+} as const;
 type ValidatableProvider = keyof typeof adapters;
 
 export async function POST(req: Request): Promise<Response> {
@@ -23,11 +28,16 @@ export async function POST(req: Request): Promise<Response> {
 
   const provider = body.provider;
   const apiKey = body.apiKey?.trim();
-  if (apiKey === undefined || apiKey === "" || (provider !== "gemini" && provider !== "openai")) {
-    return withSession({ error: "Pilih provider (gemini/openai) dan masukkan API key." }, s, { status: 400 });
+  if (
+    apiKey === undefined ||
+    apiKey === "" ||
+    (provider !== "gemini" && provider !== "openai" && provider !== "openai_codex")
+  ) {
+    return withSession({ error: "Pilih provider (Gemini / OpenAI / Codex) dan masukkan API key atau token." }, s, { status: 400 });
   }
 
-  const cred: Credential = { provider: provider as ValidatableProvider, type: "api_key", secret: apiKey };
+  const credType = provider === "openai_codex" ? "oauth_token" : "api_key";
+  const cred: Credential = { provider: provider as ValidatableProvider, type: credType, secret: apiKey };
   let result;
   try {
     result = await adapters[provider as ValidatableProvider]().validateCredential(cred);
@@ -40,10 +50,11 @@ export async function POST(req: Request): Promise<Response> {
     return withSession({ ok: false, error: result.detail ?? "Kredensial ditolak." }, s);
   }
 
-  app.credentials.upsert({
+  await app.ensureUser(s.userId);
+  await app.credentials.upsert({
     userId: s.userId,
     provider: provider as ValidatableProvider,
-    credType: "api_key",
+    credType,
     ciphertext: encryptSecret(apiKey, app.master),
     fingerprint: fingerprint(apiKey),
     capabilities: result.capabilities,
