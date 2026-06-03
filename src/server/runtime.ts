@@ -8,6 +8,9 @@ import { randomUUID } from "node:crypto";
 import { LocalMasterKey } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
+import type { ProviderRegistry } from "@/lib/ai/llm-provider";
+import { RecordingProviderRegistry } from "@/server/ai/recording-registry";
+import { InMemoryUsageRecorder, type UsageRecorder } from "@/server/services/usage-recorder";
 import { InMemoryRepository, type Repository } from "@/server/domain/repositories";
 import type { BrandKit, BusinessDocument, BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
 import { ProjectService } from "@/server/services/project-service";
@@ -31,7 +34,8 @@ import { byokMasterKeyBase64 } from "@/server/env";
 export interface AppRuntime {
   master: LocalMasterKey;
   credentials: UpsertableCredentialStore;
-  registry: DefaultProviderRegistry;
+  registry: ProviderRegistry;
+  usage: UsageRecorder;
   credentialService: CredentialService;
   projects: ProjectService;
   research: ResearchService;
@@ -66,6 +70,7 @@ function createRuntime(): AppRuntime {
   let plansRepo: Repository<BusinessPlan>;
   let brandKitsRepo: Repository<BrandKit>;
   let documentsRepo: Repository<BusinessDocument>;
+  let usage: UsageRecorder;
   let mcpClients: McpClientStore;
   let mcpAudit: McpAuditStore;
   let ensureUser: (userId: string) => Promise<void>;
@@ -80,6 +85,7 @@ function createRuntime(): AppRuntime {
     plansRepo = p.plans;
     brandKitsRepo = p.brandKits;
     documentsRepo = p.documents;
+    usage = p.usage;
     mcpClients = p.mcpClients;
     mcpAudit = p.mcpAudit;
     ensureUser = p.ensureUser;
@@ -92,6 +98,7 @@ function createRuntime(): AppRuntime {
     plansRepo = new InMemoryRepository<BusinessPlan>();
     brandKitsRepo = new InMemoryRepository<BrandKit>();
     documentsRepo = new InMemoryRepository<BusinessDocument>();
+    usage = new InMemoryUsageRecorder();
     mcpClients = new InMemoryMcpClientStore();
     mcpAudit = new InMemoryMcpAuditStore();
     ensureUser = async () => {};
@@ -108,9 +115,10 @@ function createRuntime(): AppRuntime {
     getProfile = async (userId) => profiles.get(userId) ?? null;
   }
 
-  const registry = new DefaultProviderRegistry(credentials, master);
   const idGen = (): string => randomUUID();
   const now = (): string => new Date().toISOString();
+  // Records BYOK usage on every LLM call (UI + MCP) via a single registry decorator. PRD §16.
+  const registry = new RecordingProviderRegistry(new DefaultProviderRegistry(credentials, master), usage, now);
 
   // Hoist services so the MCP gateway shares the SAME instances as the web adapters (headless == UI).
   const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo, idGen, now });
@@ -124,6 +132,7 @@ function createRuntime(): AppRuntime {
     master,
     credentials,
     registry,
+    usage,
     credentialService: new CredentialService(credentials, master),
     projects,
     research,

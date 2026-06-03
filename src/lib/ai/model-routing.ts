@@ -55,3 +55,14 @@ export const API_NOTES = {
 export function resolveModel(task: TaskClass, provider: ProviderId): string | undefined {
   return MODEL_ROUTING[task]?.[provider];
 }
+
+/** Reverse lookup: which provider owns a given model id (single source of truth). */
+export function providerOfModel(model: string | undefined): ProviderId | "unknown" {
+  if (model === undefined) return "unknown";
+  for (const task of Object.keys(MODEL_ROUTING) as TaskClass[]) {
+    for (const [prov, id] of Object.entries(MODEL_ROUTING[task])) {
+      if (id === model) return prov as ProviderId;
+    }
+  }
+  return "unknown";
+}

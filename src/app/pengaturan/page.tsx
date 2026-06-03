@@ -10,6 +10,15 @@ import { McpTokens } from "./mcp-tokens";
 
 export const metadata: Metadata = { title: "Pengaturan" };
 
+function UsageStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-muted/60 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 export default async function SettingsPage() {
   const session = await auth();
   const user = session?.user;
@@ -36,6 +45,14 @@ export default async function SettingsPage() {
 
   const summary = userId !== null ? await app.credentialService.summary(userId) : null;
   const mcpClients = userId !== null ? await app.mcpGateway.listClients(userId) : [];
+  const usage = userId !== null ? await app.usage.summary(userId) : null;
+
+  const OP_LABEL: Record<string, string> = {
+    structured: "Generasi terstruktur",
+    grounded: "Riset tergrounding",
+    image: "Generasi gambar",
+    deep_research: "Deep Research",
+  };
 
   return (
     <div className="min-h-dvh">
@@ -62,6 +79,32 @@ export default async function SettingsPage() {
         <section className="mt-6">
           <KeyManager initialSummary={summary} />
         </section>
+
+        {/* BYOK usage */}
+        {usage !== null && usage.total > 0 && (
+          <section className="mt-6 rounded-card border border-border bg-surface p-5">
+            <h2 className="text-sm font-semibold">Pemakaian AI (kuota key-mu)</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Setiap panggilan AI memakai kuota key milikmu. Ini ringkasannya — agar kamu sadar konsumsi.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <UsageStat label="Total panggilan" value={usage.total} />
+              <UsageStat label="Kueri tergrounding" value={usage.groundedQueries} />
+              <UsageStat label="Gambar dibuat" value={usage.imagesGenerated} />
+              <UsageStat label="Provider" value={Object.keys(usage.byProvider).filter((p) => p !== "unknown").length} />
+            </div>
+            {Object.keys(usage.byOperation).length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                {Object.entries(usage.byOperation).map(([op, n]) => (
+                  <li key={op} className="flex justify-between">
+                    <span>{OP_LABEL[op] ?? op}</span>
+                    <span className="tabular-nums">{n}×</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         {/* MCP Agent Gateway tokens */}
         <section className="mt-6">

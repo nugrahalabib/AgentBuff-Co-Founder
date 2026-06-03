@@ -35,6 +35,9 @@ import type {
 import type { Capabilities, CredentialType, ProviderId } from "@/lib/ai/types";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "@/server/engine/research/index";
 import type { FinancialInputs, FinancialsResult } from "@/server/engine/financial/index";
+import type { UsageEntry, UsageRecorder, UsageSummary } from "@/server/services/usage-recorder";
+import { summarize } from "@/server/services/usage-recorder";
+import { providerOfModel } from "@/lib/ai/model-routing";
 import { prisma } from "./prisma";
 
 const json = (v: unknown): Prisma.InputJsonValue => v as Prisma.InputJsonValue;
@@ -452,6 +455,39 @@ class PrismaMcpAuditStore implements McpAuditStore {
   }
 }
 
+// ---------- UsageEvent (BYOK usage tracking) ----------
+class PrismaUsageRecorder implements UsageRecorder {
+  async record(e: UsageEntry): Promise<void> {
+    await prisma.usageEvent
+      .create({
+        data: {
+          user: { connect: { id: e.userId } },
+          source: e.source ?? "ui",
+          operation: e.operation,
+          modelUsed: e.model ?? null,
+          groundedQueries: e.groundedQueries ?? null,
+          imagesGenerated: e.imagesGenerated ?? null,
+          ts: new Date(e.ts),
+        },
+      })
+      .catch(() => undefined); // usage logging must never break an LLM call
+  }
+  async summary(userId: string, limit = 20): Promise<UsageSummary> {
+    const rows = await prisma.usageEvent.findMany({ where: { userId }, orderBy: { ts: "asc" }, take: 500 });
+    const entries: UsageEntry[] = rows.map((r) => ({
+      userId: r.userId,
+      operation: r.operation as UsageEntry["operation"],
+      provider: providerOfModel(r.modelUsed ?? undefined) as UsageEntry["provider"],
+      model: r.modelUsed ?? undefined,
+      groundedQueries: r.groundedQueries ?? undefined,
+      imagesGenerated: r.imagesGenerated ?? undefined,
+      source: (r.source as UsageEntry["source"]) ?? undefined,
+      ts: r.ts.toISOString(),
+    }));
+    return summarize(entries, limit);
+  }
+}
+
 /**
  * Ensure a User row exists so FK-constrained rows can reference it.
  * Google users are normally created earlier by the sign-in event (persistGoogleUser); this is a
@@ -504,6 +540,7 @@ export interface PrismaPersistence {
   credentials: PrismaCredentialStore;
   mcpClients: PrismaMcpClientStore;
   mcpAudit: PrismaMcpAuditStore;
+  usage: PrismaUsageRecorder;
   ensureUser: (userId: string) => Promise<void>;
   saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   getProfile: (userId: string) => Promise<OnboardingProfile | null>;
@@ -519,6 +556,7 @@ export function createPrismaPersistence(): PrismaPersistence {
     credentials: new PrismaCredentialStore(),
     mcpClients: new PrismaMcpClientStore(),
     mcpAudit: new PrismaMcpAuditStore(),
+    usage: new PrismaUsageRecorder(),
     ensureUser,
     saveProfile: savePrismaProfile,
     getProfile: getPrismaProfile,
