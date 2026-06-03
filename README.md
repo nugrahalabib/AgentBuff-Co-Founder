@@ -10,8 +10,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Tests](https://img.shields.io/badge/tests-130%20passing-22c55e)](#-quality--testing)
-[![Engine coverage](https://img.shields.io/badge/financial%20engine-100%25%20covered-6366F1)](#-quality--testing)
+[![Tests](https://img.shields.io/badge/tests-260%20passing-22c55e)](#-quality--testing)
+[![Engine coverage](https://img.shields.io/badge/deterministic%20engines-100%25%20covered-6366F1)](#-quality--testing)
 [![MCP](https://img.shields.io/badge/MCP-native-818CF8)](#-mcp--headless--ui)
 [![BYOK](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI%20%7C%20Codex-059669)](#-byok--bring-your-own-key)
 
@@ -48,9 +48,11 @@ Plus three more non-negotiables:
 | 1️⃣ | **Auth & Onboarding** | Frictionless sign-in + guided BYOK key validation (real liveness + capability detection). |
 | 2️⃣ | **Deep Research & Validator** | Grounded market research → LLM proposes signals → **deterministic 0–100 Validation Score** + clickable sources. |
 | 3️⃣ | **Master Business Planner** | A financial intake wizard → **deterministic engine** (HPP→BEP→projections→payback/ROI/NPV/IRR) → LLM writes the plan with numbers injected. |
-| 4️⃣ | **Brand Forge Studio** | Positioning, naming, tone, palette & typography, moodboard, logo concepts (Nano Banana / gpt-image, BYOK). |
-| 5️⃣ | **Deck & Docs Engine** | Investor-grade **Business Proposal (A4)** & **Pitch Deck (16:9)** PDFs via template-constrained HTML/CSS → Paged.js → Chromium. |
-| 6️⃣ | **AgentBuff Agent Gateway (MCP)** | The whole engine, callable by AI agents over Model Context Protocol. |
+| 4️⃣ | **Brand Forge Studio** | Positioning, naming, tone, **deterministic colour palette** (code-generated from a proposed primary), typography, moodboard & logo concepts (Nano Banana / gpt-image, BYOK). |
+| 5️⃣ | **Deck & Docs Engine** | Investor-grade **Business Proposal (A4)** & **Pitch Deck (16:9)** via **Template-Constrained Generation** — LLM fills text slots, the server renders sanitized HTML and binds every number from the engine → print/PDF. |
+| 6️⃣ | **AgentBuff Agent Gateway (MCP)** | The whole engine, callable by AI agents over Streamable-HTTP JSON-RPC with bearer tokens & **granular read/write scopes**. |
+
+Plus cross-cutting: **BYOK usage tracking**, **UU PDP data export & account deletion**, a just-in-time **glossary** for jargon, security headers/CSRF, and an SSE **progress stepper** for long research.
 
 ---
 
@@ -66,10 +68,11 @@ Business logic lives in one engine; the UI, the MCP server, and webhooks are **t
                    ▼                     ▼                      ▼
         ┌───────────────────────────────────────────────────────────────┐
         │                    ENGINE / SERVICE LAYER                      │
-        │   FinancialEngine (deterministic, 100% tested) · ValidationScore │
-        │   ProjectService · ResearchService · PlannerService            │
+        │   Deterministic engines (100% tested): Financial · ValidationScore │
+        │   · research signals · scenarios · brand palette                │
+        │   Project · Research · Planner · Brand · Docs · Account · Usage  │
         │   ── Provider Abstraction Layer (LLMProvider) ──►  Gemini / OpenAI │
-        │   ── BYOK Key Vault (envelope encryption) ──                    │
+        │   ── BYOK Key Vault (envelope encryption) · usage recorder ──    │
         └───────────────────────────────────────────────────────────────┘
                    │            │             │              │
               PostgreSQL     Redis        Object Store    PDF Worker
@@ -104,14 +107,14 @@ The app never needs an AI key of its own. You bring **Gemini**, **OpenAI**, or *
 ## 🧪 Quality & testing
 
 ```bash
-pnpm test           # 130 unit / contract tests
+pnpm test           # 260 unit / contract / integration tests
 pnpm test:cov       # deterministic engines gated at 100%
 pnpm typecheck      # tsc --strict, clean
 pnpm build          # next build (also type-checks)
 pnpm exec prisma validate
 ```
 
-- **100% coverage** (statements / branches / functions / lines) on the Financial Engine **and** the Validation-Score engine.
+- **100% coverage** (statements / branches / functions / lines) on every deterministic engine: Financial, Validation-Score + **signal derivation**, **scenarios**, and the **brand palette**.
 - The Financial Engine was **hardened by an adversarial multi-agent review** (caught & fixed an IRR-bracket bug and a numeric-overflow edge case).
 - Provider adapters have **mocked-`fetch` contract tests**; the MCP catalog has a full end-to-end flow test.
 
@@ -123,11 +126,12 @@ External agents get the exact same engine as the web app, via the **AgentBuff Ag
 
 ```
 agentbuff.create_project · agentbuff.list_projects · agentbuff.get_project
-agentbuff.validate_idea  · agentbuff.calculate_financials (deterministic, no LLM)
-agentbuff.generate_business_plan
+agentbuff.calculate_financials · agentbuff.compute_scenarios   (deterministic, no LLM)
+agentbuff.validate_idea · agentbuff.generate_brand_kit
+agentbuff.generate_document · agentbuff.generate_business_plan
 ```
 
-`calculate_financials` is pure and deterministic — agents get auditable numbers with zero hallucination.
+`calculate_financials` / `compute_scenarios` are pure and deterministic — agents get auditable numbers with zero hallucination. The gateway speaks **JSON-RPC 2.0 over Streamable HTTP** at `POST /api/mcp` (`Authorization: Bearer <token>`), with hashed tokens and **per-tool read/write scopes** (mint a read-only token for analytics agents).
 
 ---
 
@@ -156,7 +160,7 @@ docs/                       # PRD (source of truth), IMPLEMENTATION-STATUS, RUNN
 
 | ✅ Done & verified | 🔌 Optional next (needs your infra) |
 |---|---|
-| Deterministic engines (100%) · BYOK encryption · Gemini + OpenAI adapters · Provider registry · domain + services · full MCP catalog · Prisma schema · Next.js PWA (all 6 modules) · **real end-to-end flow** (link key → project → grounded validate + plan) | Google OAuth login · Postgres persistence (Prisma) · Deep Research / image-gen / PDF-render worker (need live keys + Chromium) |
+| All deterministic engines (100%) · BYOK encryption + credential health · Google auth · multi-stage grounded Deep Research + SSE stepper · Planner scenarios + charts · Brand Forge (palette + image adapters) · Deck & Docs (sanitized HTML → PDF) · MCP gateway (9 tools, scopes, audit) · usage tracking · UU PDP export/erasure · Postgres auto-switch · **golden path end-to-end** | Live BullMQ/Redis + S3 backends (seams exist) · headless-Chromium PDF worker (browser print works today) · full OAuth 2.1 AS + PKCE (PAT + scopes work today) · Deep Research **Jalur A** async agents · context caching / Batch API |
 
 Full map: [`docs/IMPLEMENTATION-STATUS.md`](docs/IMPLEMENTATION-STATUS.md).
 

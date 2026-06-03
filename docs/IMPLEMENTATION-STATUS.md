@@ -1,7 +1,11 @@
 # Implementation Status — AgentBuff Co-Founder
 
 > Living map of PRD → code. Updated as modules land. Legend: ✅ done & tested · 🟡 partial/scaffold · ⛔ needs live infra/credentials (built behind a clean interface, not yet wired to the real service) · ⬜ not started.
-> Status at last update: **130 tests passing · 100% coverage on both deterministic engines · `tsc` strict clean · `next build` green (14 routes).** Runs **end-to-end with zero infra** — see [RUNNING.md](RUNNING.md).
+> Status at last update: **260 tests passing · 100% coverage on ALL deterministic engines (financial, research scoring + signals, scenarios, brand palette) · `tsc` strict clean · `next build` green.** The full **golden path runs end-to-end**: onboarding → grounded Deep Research → plan + scenarios → Brand Forge → proposal/deck PDF, plus the MCP gateway. See [RUNNING.md](RUNNING.md).
+>
+> **Landed since the foundation (all verified):** multi-stage grounded Deep Research pipeline (Jalur B, stages 0–6) with deterministic signal derivation + SSE progress + rich citation UI · deterministic scenarios (P/R/O) + cash-flow chart + staleness · Brand Forge (BrandService + deterministic palette engine + real Gemini/OpenAI image-gen adapters) · Deck & Docs (Template-Constrained Generation → HTML sanitizer → A4 proposal + 16:9 deck → print/PDF) · MCP Streamable-HTTP JSON-RPC gateway (hashed bearer PAT, granular read/write scopes, audit, 9 tools, token-mgmt UI) · security/trust hardening (fail-closed secrets, CSP, retry/backoff, schema validate+repair, prompt-injection isolation, CSRF) · Google auth with real user persistence · BYOK credential health + Settings · usage/cost tracking (recording-registry decorator) · UU PDP data export + account erasure · just-in-time glossary · ObjectStorage + JobQueue seams.
+>
+> **Still behind seams (need live infra, not yet wired):** BullMQ/Redis + S3 backends · headless-Chromium server-side PDF worker · full OAuth 2.1 AS (PKCE/DCR) · MCP resources/prompts · Deep Research **Jalur A** async agents (501 stubs) · context caching + Batch API.
 
 ## Verified core (deterministic + integration) — ✅
 | Area | PRD | Where | Tests |
