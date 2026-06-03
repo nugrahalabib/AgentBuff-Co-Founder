@@ -6,12 +6,32 @@ import type { BusinessPlan, Project, ResearchReport } from "../../../src/server/
 import { ProjectService } from "../../../src/server/services/project-service";
 import { ResearchService } from "../../../src/server/services/research-service";
 import { PlannerService } from "../../../src/server/services/planner-service";
-import { computeValidationScore } from "../../../src/server/engine/research/index";
+import { assembleSignals, computeValidationScore } from "../../../src/server/engine/research/index";
 import type { FinancialInputs } from "../../../src/server/engine/financial/index";
 import type { LLMProvider, ProviderRegistry } from "../../../src/lib/ai/llm-provider";
 import type { Credential } from "../../../src/lib/ai/types";
 
-const signals = { demandStrength: 0.8, marginHeadroom: 0.7, competitionGap: 0.6, differentiation: 0.5, summary: "ok" };
+// Stage outputs returned by the mocked provider, selected by which schema each call presents.
+const NORMALIZE = { product: "Kopi spesialti", targetSegment: "pekerja", geography: "Jakarta" };
+const EXTRACTION = {
+  demandSignals: [{ label: "tren naik" }],
+  trendDirection: "rising" as const,
+  competitors: [{ name: "Kompetitor X" }],
+  pricing: { min: 18000, median: 20000, max: 24000, currency: "IDR" },
+  unitCostEstimate: 8000,
+  costs: [],
+  risks: [],
+  differentiation: 0.5,
+};
+const SYNTHESIS = { summary: "ringkasan", recommendationReason: "alasan", resources: [] };
+const PLAN_NARRATIVE = {
+  execSummary: "e", businessDesc: "b", marketAnalysis: "m", marketingStrategy: "ms",
+  operations: "o", roadmap: "rd", risks: "rk", closing: "c",
+};
+/** The deterministic score the engine derives from EXTRACTION (LLM never returns the score). */
+const EXPECTED_SCORE = computeValidationScore(
+  assembleSignals({ demandSignalCount: 1, trend: "rising", priceMedian: 20000, costEstimate: 8000, competitorCount: 1, differentiation: 0.5, risks: [] }),
+).score;
 
 const inputs: FinancialInputs = {
   modelType: "physical",
@@ -51,7 +71,13 @@ function makeWorld() {
       citations: [{ startIndex: 0, endIndex: 2, sourceUrl: "https://s.id", confidence: "grounded" }],
       sources: [{ url: "https://s.id", title: "Sumber" }],
     }),
-    generateStructured: vi.fn().mockResolvedValue(signals),
+    generateStructured: vi.fn().mockImplementation(async (_c: unknown, _p: string, o: { jsonSchema: { properties?: Record<string, unknown> } }) => {
+      const props = o.jsonSchema.properties ?? {};
+      if ("product" in props) return NORMALIZE;
+      if ("demandSignals" in props) return EXTRACTION;
+      if ("recommendationReason" in props) return SYNTHESIS;
+      return PLAN_NARRATIVE; // plan narrative schema
+    }),
   } as unknown as LLMProvider;
   const cred: Credential = { provider: "gemini", type: "api_key", secret: "x" };
   const registry = { forTask: vi.fn().mockResolvedValue({ provider, cred }) } as unknown as ProviderRegistry;
@@ -106,7 +132,7 @@ describe("MCP tool catalog", () => {
       validation_score: number;
       sources: { url: string }[];
     };
-    expect(validated.validation_score).toBe(computeValidationScore(signals).score); // deterministic, in code
+    expect(validated.validation_score).toBe(EXPECTED_SCORE); // deterministic, computed in code
     expect(validated.sources[0]!.url).toBe("https://s.id");
 
     const planned = (await tools.call(

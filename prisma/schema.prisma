@@ -124,10 +124,13 @@ model ResearchReport {
   scoreBreakdown      Json
   signals             Json
   summary             String?
+  recommendationReason String?
   market              Json?
   competitors         Json?
   pricing             Json?
+  costs               Json?
   risks               Json?
+  resources           Json?
   citations           Json
   sources             Json
   isGrounded          Boolean        @default(false)

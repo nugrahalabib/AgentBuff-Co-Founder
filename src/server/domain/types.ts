@@ -41,6 +41,52 @@ export interface SourceRef {
   title?: string;
 }
 
+// --- Structured outputs of the multi-stage research pipeline (PRD §9.2.3, §9.2.7). ---
+export type TrendDirection = "rising" | "stable" | "declining" | "unknown";
+
+export interface DemandSignal {
+  label: string;
+  note?: string;
+}
+export interface ResearchMarket {
+  demandSignals: DemandSignal[];
+  trendDirection: TrendDirection;
+}
+export interface Competitor {
+  name: string;
+  positioning?: string;
+  priceRange?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  sourceUrl?: string;
+}
+export interface PricingBenchmark {
+  min: number;
+  median: number;
+  max: number;
+  currency: string;
+}
+export interface CostBenchmark {
+  item: string;
+  estAmount: number;
+  sourceUrl?: string;
+}
+export type RiskCategory = "regulatory" | "market" | "operational" | "financial" | "other";
+export interface ResearchRisk {
+  category: RiskCategory;
+  /** 1..5 */
+  severity: number;
+  description: string;
+  mitigation?: string;
+}
+export interface ResourceLink {
+  label: string;
+  url: string;
+  type?: string;
+}
+/** Which research path produced the report. PRD §9.2.5. */
+export type ResearchSourcePath = "deep_research_agent" | "custom_pipeline";
+
 export interface ResearchReport {
   id: string;
   projectId: string;
@@ -48,13 +94,25 @@ export interface ResearchReport {
   /** Deterministic 0..100 (computed in code, never by the LLM). PRD §9.2.4. */
   validationScore: number;
   recommendation: Recommendation;
+  /** LLM synthesis explaining the recommendation (cites sources). PRD §9.2.3 stage 6. */
+  recommendationReason?: string;
   scoreBreakdown: ScoreBreakdown;
   signals: ValidationSignals;
   summary?: string;
+  // Structured stage outputs (§9.2.7). Optional so the legacy single-call path still type-checks.
+  sourcePath?: ResearchSourcePath;
+  market?: ResearchMarket;
+  competitors?: Competitor[];
+  pricing?: PricingBenchmark;
+  costs?: CostBenchmark[];
+  risks?: ResearchRisk[];
+  resources?: ResourceLink[];
   /** Clickable sources from grounding (PRD §9.2.1). Empty → claims labelled "estimasi". */
   citations: Citation[];
   sources: SourceRef[];
   isGrounded: boolean;
+  /** Number of grounded queries run (budget tracking, §9.2.5). */
+  groundingQueryCount?: number;
   generatedAt: string;
   version: number;
 }

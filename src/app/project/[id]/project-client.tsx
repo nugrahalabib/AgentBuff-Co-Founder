@@ -31,6 +31,19 @@ const NARRATIVE_LABELS: Record<string, string> = {
   closing: "Penutup",
 };
 
+const RESEARCH_STAGES: { key: string; label: string }[] = [
+  { key: "normalize", label: "Merapikan ide" },
+  { key: "demand", label: "Menganalisis permintaan pasar" },
+  { key: "competitor", label: "Memeriksa kompetitor" },
+  { key: "pricing", label: "Membandingkan harga & biaya" },
+  { key: "risk", label: "Menilai risiko & regulasi" },
+  { key: "score", label: "Menghitung skor" },
+  { key: "synthesis", label: "Menyusun laporan" },
+];
+const RISK_LABEL: Record<string, string> = {
+  regulatory: "Regulasi", market: "Pasar", operational: "Operasional", financial: "Finansial", other: "Lainnya",
+};
+
 interface PlanForm {
   price: number;
   variable: number;
@@ -61,6 +74,7 @@ export function ProjectClient({
   const [form, setForm] = useState<PlanForm>(PLAN_DEFAULTS);
   const [busy, setBusy] = useState<"validate" | "plan" | null>(null);
   const [error, setError] = useState("");
+  const [stages, setStages] = useState<Record<string, "start" | "done">>({});
 
   const setField = (k: keyof PlanForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: Number(e.target.value) }));
@@ -68,15 +82,40 @@ export function ProjectClient({
   async function runValidation() {
     setBusy("validate");
     setError("");
+    setStages({});
     try {
-      const res = await fetch(`/api/projects/${projectId}/validate`, {
+      const res = await fetch(`/api/projects/${projectId}/validate/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      const data = (await res.json()) as { report?: ResearchReport; error?: string };
-      if (!res.ok || data.report === undefined) setError(data.error ?? "Gagal validasi.");
-      else setResearch(data.report);
+      if (!res.ok || res.body === null) {
+        setError("Gagal memulai validasi.");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const ev = parseSse(part);
+          if (ev === null) continue;
+          if (ev.event === "stage") {
+            const s = ev.data as { stage: string; status: "start" | "done" };
+            setStages((prev) => ({ ...prev, [s.stage]: s.status }));
+          } else if (ev.event === "done") {
+            setResearch((ev.data as { report: ResearchReport }).report);
+          } else if (ev.event === "error") {
+            const d = ev.data as { error: string };
+            setError(d.error);
+          }
+        }
+      }
     } catch {
       setError("Tidak bisa menghubungi server.");
     } finally {
@@ -145,44 +184,16 @@ export function ProjectClient({
             {busy === "validate" ? "Meriset…" : research ? "Riset ulang" : "Jalankan Validasi (AI)"}
           </Button>
         </div>
-        {research === null ? (
+        {busy === "validate" ? (
+          <ResearchStepper stages={stages} />
+        ) : research === null ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            Riset pasar tergrounding memakai API key-mu, lalu skor kelayakan dihitung deterministik.
+            Riset pasar tergrounding memakai API key-mu (permintaan → kompetitor → harga → risiko), lalu skor kelayakan
+            dihitung deterministik. Setiap klaim menampilkan sumber yang bisa diklik; yang tanpa sumber ditandai
+            &ldquo;estimasi&rdquo;.
           </p>
         ) : (
-          <div className="mt-4">
-            <div className="flex items-center gap-3">
-              <span className="font-display text-4xl tabular-nums">{research.validationScore}</span>
-              <span className="text-xs text-muted-foreground">/ 100</span>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${REC[research.recommendation]?.cls ?? ""}`}>
-                {REC[research.recommendation]?.label ?? research.recommendation}
-              </span>
-              {!research.isGrounded && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">estimasi</span>
-              )}
-            </div>
-            {research.summary !== undefined && research.summary !== "" && (
-              <p className="mt-3 text-sm text-muted-foreground">{research.summary}</p>
-            )}
-            {research.sources.length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs font-medium text-muted-foreground">Sumber</p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {research.sources.map((s, i) => (
-                    <a
-                      key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs text-primary hover:bg-muted"
-                    >
-                      {hostOf(s.url)} ↗
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <ResearchReportView report={research} />
         )}
       </section>
 
@@ -287,6 +298,182 @@ function PlanScenarios({ scenarios }: { scenarios: ScenarioSummarySet }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function parseSse(chunk: string): { event: string; data: unknown } | null {
+  let event = "message";
+  let data = "";
+  for (const line of chunk.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  if (data === "") return null;
+  try {
+    return { event, data: JSON.parse(data) };
+  } catch {
+    return null;
+  }
+}
+
+function ResearchStepper({ stages }: { stages: Record<string, "start" | "done"> }) {
+  return (
+    <ul className="mt-4 space-y-2">
+      {RESEARCH_STAGES.map((s) => {
+        const st = stages[s.key];
+        return (
+          <li key={s.key} className="flex items-center gap-2.5 text-sm">
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${
+                st === "done" ? "bg-accent text-on-accent" : st === "start" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {st === "done" ? "✓" : st === "start" ? <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> : "•"}
+            </span>
+            <span className={st === undefined ? "text-muted-foreground" : ""}>{s.label}…</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SourceChip({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs text-primary hover:bg-muted"
+    >
+      <img src={`https://www.google.com/s2/favicons?domain=${hostOf(url)}&sz=32`} alt="" className="h-3.5 w-3.5 rounded-sm" />
+      {hostOf(url)} ↗
+    </a>
+  );
+}
+
+function ResearchReportView({ report }: { report: ResearchReport }) {
+  return (
+    <div className="mt-4 space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-display text-4xl tabular-nums">{report.validationScore}</span>
+        <span className="text-xs text-muted-foreground">/ 100</span>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${REC[report.recommendation]?.cls ?? ""}`}>
+          {REC[report.recommendation]?.label ?? report.recommendation}
+        </span>
+        {!report.isGrounded && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Tanpa sumber tergrounding">
+            estimasi
+          </span>
+        )}
+        {report.isGrounded && report.groundingQueryCount !== undefined && (
+          <span className="text-xs text-muted-foreground">{report.groundingQueryCount} kueri tergrounding</span>
+        )}
+      </div>
+
+      {/* Score breakdown (transparency, §9.2.4) */}
+      <div className="space-y-1.5">
+        {[
+          ["Permintaan", report.scoreBreakdown.demand, 35],
+          ["Margin", report.scoreBreakdown.margin, 30],
+          ["Kompetisi", report.scoreBreakdown.competition, 20],
+          ["Diferensiasi", report.scoreBreakdown.differentiation, 15],
+        ].map(([label, val, max]) => (
+          <div key={label as string}>
+            <div className="flex justify-between text-xs">
+              <span>{label}</span>
+              <span className="tabular-nums text-muted-foreground">{val} / {max}</span>
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-muted">
+              <div className="h-1.5 rounded-full bg-primary" style={{ width: `${((val as number) / (max as number)) * 100}%` }} />
+            </div>
+          </div>
+        ))}
+        {report.scoreBreakdown.regulatoryPenalty > 0 && (
+          <p className="text-xs text-destructive">− {report.scoreBreakdown.regulatoryPenalty} penalti regulasi</p>
+        )}
+      </div>
+
+      {report.summary !== undefined && report.summary !== "" && (
+        <p className="text-sm text-muted-foreground">{report.summary}</p>
+      )}
+      {report.recommendationReason !== undefined && report.recommendationReason !== "" && (
+        <p className="rounded-card border border-border bg-muted/30 p-3 text-sm">{report.recommendationReason}</p>
+      )}
+
+      {/* Competitors */}
+      {report.competitors !== undefined && report.competitors.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Kompetitor ({report.competitors.length})</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {report.competitors.map((c, i) => (
+              <div key={i} className="rounded-xl border border-border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">{c.name}</span>
+                  {c.priceRange !== undefined && <span className="text-xs text-muted-foreground">{c.priceRange}</span>}
+                </div>
+                {c.positioning !== undefined && <p className="mt-1 text-xs text-muted-foreground">{c.positioning}</p>}
+                {c.sourceUrl !== undefined && <div className="mt-1.5"><SourceChip url={c.sourceUrl} /></div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pricing */}
+      {report.pricing !== undefined && (
+        <div className="flex flex-wrap gap-3 rounded-xl border border-border p-3 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">Kisaran harga pasar:</span>
+          <span className="tabular-nums">{idr(report.pricing.min)} – {idr(report.pricing.max)}</span>
+          <span className="tabular-nums text-muted-foreground">median {idr(report.pricing.median)}</span>
+        </div>
+      )}
+
+      {/* Risks */}
+      {report.risks !== undefined && report.risks.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Risiko</p>
+          <ul className="space-y-1.5">
+            {report.risks.map((r, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className="mt-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{RISK_LABEL[r.category] ?? r.category}</span>
+                <span className="flex-1">
+                  {r.description}
+                  {r.mitigation !== undefined && <span className="text-muted-foreground"> — mitigasi: {r.mitigation}</span>}
+                </span>
+                <span className="text-xs text-warning">sev {r.severity}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Resources */}
+      {report.resources !== undefined && report.resources.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Sumber daya</p>
+          <div className="flex flex-wrap gap-1.5">
+            {report.resources.map((r, i) => (
+              <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-primary hover:bg-muted">
+                {r.label} ↗
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All sources */}
+      {report.sources.length > 0 && (
+        <details className="rounded-card border border-border bg-surface p-3">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Semua Sumber ({report.sources.length})</summary>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {report.sources.map((s, i) => (
+              <SourceChip key={i} url={s.url} />
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
