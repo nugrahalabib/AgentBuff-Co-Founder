@@ -21,16 +21,17 @@ export async function POST(req: Request): Promise<Response> {
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Masuk dulu untuk mengelola token MCP." }, { status: 401 });
 
-  let body: { action?: string; name?: string; id?: string };
+  let body: { action?: string; name?: string; id?: string; readOnly?: boolean };
   try {
-    body = (await req.json()) as { action?: string; name?: string; id?: string };
+    body = (await req.json()) as { action?: string; name?: string; id?: string; readOnly?: boolean };
   } catch {
     return NextResponse.json({ error: "Body permintaan bukan JSON yang valid." }, { status: 400 });
   }
 
   if (body.action === "create") {
     await app.ensureUser(userId);
-    const issued = await app.mcpGateway.issueToken(userId, body.name ?? "Token MCP");
+    const scopes = body.readOnly === true ? (["read"] as const) : (["read", "write"] as const);
+    const issued = await app.mcpGateway.issueToken(userId, body.name ?? "Token MCP", [...scopes]);
     // `token` is returned exactly once; it is never stored in plaintext nor retrievable later.
     return NextResponse.json({
       token: issued.token,

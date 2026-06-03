@@ -35,11 +35,16 @@ export class McpError extends Error {
   }
 }
 
+/** Access scope a tool requires (PRD §10.5). Read-only tools = "read"; mutating tools = "write". */
+export type McpToolScope = "read" | "write";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface McpTool<I = any, O = any> {
   name: string;
   description: string;
   inputSchema: object;
+  /** Defaults to "write" when omitted (fail-safe: unknown tools need the broader scope). */
+  scope?: McpToolScope;
   handler: (input: I, ctx: McpContext) => Promise<O>;
 }
 
@@ -47,4 +52,5 @@ export interface McpToolDescriptor {
   name: string;
   description: string;
   inputSchema: object;
+  scope: McpToolScope;
 }

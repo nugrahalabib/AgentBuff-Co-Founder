@@ -40,6 +40,7 @@ export async function POST(req: Request): Promise<Response> {
     registry: app.mcp,
     ctx: app.mcpGateway.context(authed.userId),
     clientId: authed.clientId,
+    scopes: authed.scopes,
     audit: app.mcpGateway.audit,
     now: () => new Date().toISOString(),
   });

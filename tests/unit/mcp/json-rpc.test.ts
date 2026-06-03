@@ -131,6 +131,16 @@ describe("handleRpc — tools/call", () => {
     )) as JsonRpcResponse;
     expect(res.error?.code).toBe(RPC.INVALID_PARAMS);
   });
+
+  it("denies a write-scoped tool to a read-only token (PRD §10.5)", async () => {
+    // `echo` defaults to scope "write"; a read-only token must be rejected.
+    const res = (await handleRpc(
+      { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "echo", arguments: { message: "hi" } } },
+      { ...deps(), scopes: ["read"] },
+    )) as JsonRpcResponse;
+    expect(res.error?.code).toBe(RPC.INVALID_PARAMS);
+    expect(res.error?.message).toMatch(/scope/i);
+  });
 });
 
 describe("dispatch — batch + malformed", () => {

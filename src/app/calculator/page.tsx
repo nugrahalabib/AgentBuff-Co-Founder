@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AppHeader } from "@/ui/app-header";
 import { Button } from "@/ui/button";
 import { CashFlowChart } from "@/ui/cash-flow-chart";
+import { Term } from "@/ui/glossary";
 import type { FinancialsResult, ScenarioKpis, ScenarioSummarySet } from "@/server/engine/financial/index";
 
 type FinancialsResponse = FinancialsResult & { scenarios?: ScenarioSummarySet };
@@ -160,7 +161,7 @@ function Field({ label, value, onChange }: { label: string; value: number; onCha
   );
 }
 
-function Kpi({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "good" | "bad" }) {
+function Kpi({ label, value, tone = "default" }: { label: React.ReactNode; value: string; tone?: "default" | "good" | "bad" }) {
   const color = tone === "good" ? "text-accent" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-xl bg-muted/60 p-3">
@@ -177,12 +178,12 @@ function Results({ result }: { result: FinancialsResponse }) {
   return (
     <div className="mt-4 space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Kpi label="Margin kontribusi/unit" value={idr(ue.contributionMarginPerUnit)} tone={ue.contributionMarginPerUnit > 0 ? "good" : "bad"} />
+        <Kpi label={<><Term k="contribution-margin">Margin kontribusi</Term>/unit</>} value={idr(ue.contributionMarginPerUnit)} tone={ue.contributionMarginPerUnit > 0 ? "good" : "bad"} />
         <Kpi label="Margin kotor" value={pct(ue.grossMarginPct)} />
-        <Kpi label="BEP / bulan" value={be.bepUnitsPerMonth === null ? "—" : `${be.bepUnitsPerMonthRounded} unit`} />
+        <Kpi label={<><Term k="bep">BEP</Term> / bulan</>} value={be.bepUnitsPerMonth === null ? "—" : `${be.bepUnitsPerMonthRounded} unit`} />
         <Kpi label="Modal awal" value={idr(cap.startupCapital)} />
-        <Kpi label="Payback" value={ret.paybackPeriodMonths === null ? "> horizon" : `${ret.paybackPeriodMonths} bln`} />
-        <Kpi label="ROI (horizon)" value={pct(ret.roiPct)} tone={ret.roiPct > 0 ? "good" : "bad"} />
+        <Kpi label={<Term k="payback">Payback</Term>} value={ret.paybackPeriodMonths === null ? "> horizon" : `${ret.paybackPeriodMonths} bln`} />
+        <Kpi label={<><Term k="roi">ROI</Term> (horizon)</>} value={pct(ret.roiPct)} tone={ret.roiPct > 0 ? "good" : "bad"} />
       </div>
 
       {warnings.length > 0 && (

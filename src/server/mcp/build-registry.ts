@@ -46,6 +46,7 @@ export function buildToolRegistry(): McpToolRegistry {
   registry.register({
     name: "agentbuff.list_projects",
     description: "Daftar project milik pengguna.",
+    scope: "read",
     inputSchema: { type: "object", properties: {} },
     handler: async (_input: unknown, ctx) => {
       const projects = await ctx.projects.listForUser(ctx.userId);
@@ -56,6 +57,7 @@ export function buildToolRegistry(): McpToolRegistry {
   registry.register({
     name: "agentbuff.get_project",
     description: "Ambil state lengkap project (riset + plan).",
+    scope: "read",
     inputSchema: { type: "object", required: ["project_id"], properties: { project_id: { type: "string" } } },
     handler: async (input: { project_id: string }, ctx) => {
       await requireOwnedProject(ctx, input.project_id);
@@ -66,6 +68,7 @@ export function buildToolRegistry(): McpToolRegistry {
   registry.register({
     name: "agentbuff.calculate_financials",
     description: "Hitung HPP/BEP/proyeksi/payback/ROI deterministik. Tidak memanggil LLM.",
+    scope: "read",
     inputSchema: CALCULATE_FINANCIALS_INPUT_SCHEMA,
     handler: async (input: CalculateFinancialsInput) => calculateFinancials(input),
   });
@@ -73,6 +76,7 @@ export function buildToolRegistry(): McpToolRegistry {
   registry.register({
     name: "agentbuff.compute_scenarios",
     description: "Hitung skenario Pesimistis/Realistis/Optimistis (KPI deterministik). Tidak memanggil LLM.",
+    scope: "read",
     inputSchema: CALCULATE_FINANCIALS_INPUT_SCHEMA,
     handler: async (input: CalculateFinancialsInput) => calculateScenarios(input),
   });

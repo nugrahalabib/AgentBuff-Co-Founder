@@ -20,7 +20,14 @@ describe("McpGatewayService", () => {
     expect(issued.token.startsWith("mcp_")).toBe(true);
 
     const authed = await gw.authenticate(issued.token);
-    expect(authed).toEqual({ userId: "u1", clientId: issued.id });
+    expect(authed).toEqual({ userId: "u1", clientId: issued.id, scopes: ["read", "write"] });
+  });
+
+  it("issues a read-only token whose scopes flow back on authentication", async () => {
+    const { gw } = makeGateway();
+    const issued = await gw.issueToken("u1", "Read bot", ["read"]);
+    expect(issued.scopes).toEqual(["read"]);
+    expect((await gw.authenticate(issued.token))?.scopes).toEqual(["read"]);
   });
 
   it("rejects an unknown or empty token", async () => {

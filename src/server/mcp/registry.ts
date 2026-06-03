@@ -18,6 +18,7 @@ export class McpToolRegistry {
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
+      scope: t.scope ?? "write",
     }));
   }
 

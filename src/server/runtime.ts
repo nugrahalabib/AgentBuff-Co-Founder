@@ -20,6 +20,8 @@ import { BrandService } from "@/server/services/brand-service";
 import { DocsService } from "@/server/services/docs-service";
 import { CredentialService } from "@/server/services/credential-service";
 import { AccountService } from "@/server/services/account-service";
+import { InMemoryObjectStorage, type ObjectStorage } from "@/server/storage/object-storage";
+import { InMemoryJobQueue, type JobQueue } from "@/server/jobs/job-queue";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
 import {
@@ -44,6 +46,8 @@ export interface AppRuntime {
   brand: BrandService;
   docs: DocsService;
   account: AccountService;
+  storage: ObjectStorage;
+  jobs: JobQueue;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
   repos: {
@@ -176,6 +180,8 @@ function createRuntime(): AppRuntime {
     brand,
     docs,
     account,
+    storage: new InMemoryObjectStorage(),
+    jobs: new InMemoryJobQueue(idGen, now),
     mcp: buildToolRegistry(),
     mcpGateway,
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo },

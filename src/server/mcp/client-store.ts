@@ -2,12 +2,16 @@
 // Mirrors the credential-store pattern: an interface with in-memory (dev) and Prisma (prod) impls so
 // the gateway is identical either way. Tokens are stored ONLY as hashes (see token.ts).
 
+/** Granular per-tool access scopes (PRD §10.5). "read" = read-only tools; "write" = mutating tools. */
+export type McpScope = "read" | "write";
+
 export interface McpClientRecord {
   id: string;
   ownerUserId: string;
   name: string;
   tokenHash: string;
   tokenPrefix: string;
+  scopes: McpScope[];
   status: "active" | "revoked";
   createdAt: string;
   lastUsedAt?: string;
@@ -18,6 +22,7 @@ export interface McpClientView {
   id: string;
   name: string;
   tokenPrefix: string;
+  scopes: McpScope[];
   status: "active" | "revoked";
   createdAt: string;
   lastUsedAt?: string;
@@ -50,6 +55,7 @@ const toView = (r: McpClientRecord): McpClientView => ({
   id: r.id,
   name: r.name,
   tokenPrefix: r.tokenPrefix,
+  scopes: r.scopes,
   status: r.status,
   createdAt: r.createdAt,
   lastUsedAt: r.lastUsedAt,

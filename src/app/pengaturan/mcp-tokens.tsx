@@ -7,6 +7,7 @@ interface ClientView {
   id: string;
   name: string;
   tokenPrefix: string;
+  scopes: string[];
   status: "active" | "revoked";
   createdAt: string;
   lastUsedAt?: string;
@@ -17,6 +18,7 @@ const fmt = (iso?: string) => (iso === undefined ? "—" : new Date(iso).toLocal
 export function McpTokens({ initialClients }: { initialClients: ClientView[] }) {
   const [clients, setClients] = useState<ClientView[]>(initialClients);
   const [name, setName] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [freshToken, setFreshToken] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function McpTokens({ initialClients }: { initialClients: ClientView[] }) 
       const res = await fetch("/api/mcp/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", name }),
+        body: JSON.stringify({ action: "create", name, readOnly }),
       });
       const data = (await res.json()) as { token?: string; clients?: ClientView[]; error?: string };
       if (!res.ok || data.token === undefined) {
@@ -121,6 +123,10 @@ export function McpTokens({ initialClients }: { initialClients: ClientView[] }) 
           {busy ? "…" : "Buat token"}
         </Button>
       </div>
+      <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} />
+        Hanya-baca (read-only) — agen bisa melihat data &amp; menghitung, tapi tidak membuat/mengubah.
+      </label>
 
       {/* List */}
       {active.length > 0 && (
@@ -128,7 +134,12 @@ export function McpTokens({ initialClients }: { initialClients: ClientView[] }) 
           {active.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-border bg-muted/30 p-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{c.name}</p>
+                <p className="truncate text-sm font-medium">
+                  {c.name}
+                  <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                    {c.scopes.includes("write") ? "akses penuh" : "hanya-baca"}
+                  </span>
+                </p>
                 <p className="text-xs text-muted-foreground">
                   <code>{c.tokenPrefix}</code> · dibuat {fmt(c.createdAt)} · dipakai {fmt(c.lastUsedAt)}
                 </p>

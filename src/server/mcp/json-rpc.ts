@@ -41,6 +41,8 @@ export interface RpcDeps {
   ctx: McpContext;
   /** Identifies the audit subject (MCP client id) for this connection. */
   clientId: string;
+  /** Scopes granted to the presented token (PRD §10.5). Defaults to full access if omitted. */
+  scopes?: ("read" | "write")[];
   audit?: McpAuditStore;
   now: () => string;
 }
@@ -111,8 +113,13 @@ async function handleToolCall(id: JsonRpcId, params: unknown, deps: RpcDeps): Pr
     return err(id, RPC.INVALID_PARAMS, `Tool tidak ditemukan: ${name}`);
   }
 
-  // Defense-in-depth: validate arguments against the tool's declared inputSchema.
+  // Enforce the tool's required scope against the token's granted scopes (PRD §10.5).
   const descriptor = deps.registry.list().find((t) => t.name === name);
+  if (descriptor !== undefined && deps.scopes !== undefined && !deps.scopes.includes(descriptor.scope)) {
+    return err(id, RPC.INVALID_PARAMS, `Token tidak punya scope "${descriptor.scope}" untuk tool ini.`);
+  }
+
+  // Defense-in-depth: validate arguments against the tool's declared inputSchema.
   if (descriptor !== undefined) {
     const check = validateAgainstSchema(args, descriptor.inputSchema);
     if (!check.ok) {

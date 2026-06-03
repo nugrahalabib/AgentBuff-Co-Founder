@@ -31,6 +31,7 @@ import type {
   McpClientRecord,
   McpClientStore,
   McpClientView,
+  McpScope,
 } from "@/server/mcp/client-store";
 import type { Capabilities, CredentialType, ProviderId } from "@/lib/ai/types";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "@/server/engine/research/index";
@@ -382,7 +383,7 @@ class PrismaMcpClientStore implements McpClientStore {
         name: rec.name,
         owner: { connect: { id: rec.ownerUserId } },
         oauthClientId: rec.id, // PAT mode: reuse the row id as the (unique) client id
-        scopes: ["tools"],
+        scopes: rec.scopes,
         tokenHash: rec.tokenHash,
         tokenPrefix: rec.tokenPrefix,
         status: rec.status,
@@ -399,6 +400,7 @@ class PrismaMcpClientStore implements McpClientStore {
       name: r.name,
       tokenHash: r.tokenHash,
       tokenPrefix: r.tokenPrefix,
+      scopes: (r.scopes as McpScope[]) ?? ["read", "write"],
       status: r.status as McpClientRecord["status"],
       createdAt: r.createdAt.toISOString(),
       lastUsedAt: r.lastUsedAt?.toISOString(),
@@ -410,6 +412,7 @@ class PrismaMcpClientStore implements McpClientStore {
       id: r.id,
       name: r.name,
       tokenPrefix: r.tokenPrefix ?? "—",
+      scopes: (r.scopes as McpScope[]) ?? ["read", "write"],
       status: r.status as McpClientView["status"],
       createdAt: r.createdAt.toISOString(),
       lastUsedAt: r.lastUsedAt?.toISOString(),
