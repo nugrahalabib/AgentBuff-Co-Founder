@@ -342,14 +342,22 @@ export function ProjectClient({
                   <p className="truncate text-sm font-medium">{d.title}</p>
                   <p className="text-xs text-muted-foreground">{d.type === "proposal" ? "Proposal A4" : "Pitch Deck 16:9"}</p>
                 </div>
-                <a
-                  href={`/api/projects/${projectId}/docs/${d.id}/view`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90"
-                >
-                  Buka &amp; Cetak ↗
-                </a>
+                <div className="flex shrink-0 gap-1.5">
+                  <a
+                    href={`/api/projects/${projectId}/docs/${d.id}/view`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90"
+                  >
+                    Buka &amp; Cetak ↗
+                  </a>
+                  <a
+                    href={`/api/projects/${projectId}/docs/${d.id}/pdf`}
+                    className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold hover:bg-muted"
+                  >
+                    Unduh PDF
+                  </a>
+                </div>
               </li>
             ))}
           </ul>

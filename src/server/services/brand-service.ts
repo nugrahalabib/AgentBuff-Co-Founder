@@ -18,6 +18,7 @@ import { generatePalette, normalizePrimary, type PaletteScheme } from "../engine
 import type { ProviderRegistry } from "../../lib/ai/llm-provider";
 import { ProviderError } from "../../lib/ai/registry";
 import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from "../../lib/ai/prompt-safety";
+import { parseDataUrl, type ObjectStorage } from "../storage/object-storage";
 
 export class BrandInputError extends Error {
   constructor(message: string) {
@@ -31,6 +32,9 @@ export interface BrandServiceDeps {
   registry: ProviderRegistry;
   idGen: () => string;
   now: () => string;
+  /** When present, generated images are persisted to object storage and referenced by URL
+   *  (instead of inlining a large data URL into the DB). PRD §9.4.7. */
+  storage?: ObjectStorage;
 }
 
 export interface GenerateBrandInput {
@@ -189,11 +193,26 @@ export class BrandService {
     for (const seed of seeds) {
       try {
         const { imageRef } = await imgProvider.provider.generateImage(imgProvider.cred, seed.prompt);
-        out.push({ type: seed.type, imageRef, promptUsed: seed.prompt, selected: out.length === 0 });
+        out.push({ type: seed.type, imageRef: await this.persistImage(imageRef, seed.type), promptUsed: seed.prompt, selected: out.length === 0 });
       } catch {
         // Quota/limit/policy → skip this asset; the rest of the kit still ships (§9.4.7).
       }
     }
     return out;
+  }
+
+  /** Move a data-URL image into object storage (durable, no DB bloat); fall back to the data URL. */
+  private async persistImage(imageRef: string, type: BrandAsset["type"]): Promise<string> {
+    const storage = this.deps.storage;
+    if (storage === undefined || !imageRef.startsWith("data:")) return imageRef;
+    const parsed = parseDataUrl(imageRef);
+    if (parsed === null) return imageRef;
+    try {
+      const ext = parsed.contentType.split("/")[1] ?? "png";
+      const { ref } = await storage.put({ key: `brand/${this.deps.idGen()}-${type}.${ext}`, data: parsed.data, contentType: parsed.contentType });
+      return storage.url(ref);
+    } catch {
+      return imageRef; // storage hiccup → keep the inline image
+    }
   }
 }

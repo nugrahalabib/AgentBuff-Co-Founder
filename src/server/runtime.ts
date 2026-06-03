@@ -20,8 +20,9 @@ import { BrandService } from "@/server/services/brand-service";
 import { DocsService } from "@/server/services/docs-service";
 import { CredentialService } from "@/server/services/credential-service";
 import { AccountService } from "@/server/services/account-service";
-import { InMemoryObjectStorage, type ObjectStorage } from "@/server/storage/object-storage";
-import { InMemoryJobQueue, type JobQueue } from "@/server/jobs/job-queue";
+import { createObjectStorage, type ObjectStorage } from "@/server/storage/index";
+import { createPdfRenderer, type PdfRenderer } from "@/server/docs/pdf-renderer";
+import { createJobQueue, type JobQueue } from "@/server/jobs/index";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
 import {
@@ -48,6 +49,7 @@ export interface AppRuntime {
   account: AccountService;
   storage: ObjectStorage;
   jobs: JobQueue;
+  pdf: PdfRenderer;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
   repos: {
@@ -153,7 +155,8 @@ function createRuntime(): AppRuntime {
   const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo, idGen, now });
   const research = new ResearchService({ reports: reportsRepo, registry, idGen, now });
   const planner = new PlannerService({ plans: plansRepo, registry, idGen, now });
-  const brand = new BrandService({ brandKits: brandKitsRepo, registry, idGen, now });
+  const storage = createObjectStorage();
+  const brand = new BrandService({ brandKits: brandKitsRepo, registry, idGen, now, storage });
   const docs = new DocsService({ documents: documentsRepo, registry, idGen, now });
   const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner, brand, docs }, idGen, now, mcpAudit);
   const credentialService = new CredentialService(credentials, master);
@@ -180,8 +183,9 @@ function createRuntime(): AppRuntime {
     brand,
     docs,
     account,
-    storage: new InMemoryObjectStorage(),
-    jobs: new InMemoryJobQueue(idGen, now),
+    storage,
+    jobs: createJobQueue(idGen, now),
+    pdf: createPdfRenderer(),
     mcp: buildToolRegistry(),
     mcpGateway,
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo },

@@ -30,8 +30,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Pin the workspace root to this project (avoid Turbopack mis-inferring a parent folder).
   turbopack: { root: import.meta.dirname },
-  // The deterministic engine + adapters are server-only; keep node built-ins (crypto) on the server.
-  serverExternalPackages: ["@prisma/client"],
+  // Server-only, dynamically-imported infra: keep them out of the bundle (loaded at runtime when configured).
+  serverExternalPackages: ["@prisma/client", "puppeteer", "ioredis", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
