@@ -32,6 +32,7 @@ import {
   type McpClientStore,
 } from "@/server/mcp/client-store";
 import { McpGatewayService } from "@/server/mcp/gateway-service";
+import { OAuthService } from "@/server/oauth/oauth-service";
 import { createPrismaPersistence } from "@/server/db/prisma-repositories";
 import { byokMasterKeyBase64 } from "@/server/env";
 
@@ -52,6 +53,7 @@ export interface AppRuntime {
   pdf: PdfRenderer;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
+  oauth: OAuthService;
   repos: {
     projects: Repository<Project>;
     reports: Repository<ResearchReport>;
@@ -188,6 +190,7 @@ function createRuntime(): AppRuntime {
     pdf: createPdfRenderer(),
     mcp: buildToolRegistry(),
     mcpGateway,
+    oauth: new OAuthService(),
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo },
     ensureUser,
     saveProfile,

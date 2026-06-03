@@ -12,19 +12,22 @@ export const dynamic = "force-dynamic";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function unauthorized(message: string): Response {
+function unauthorized(message: string, req: Request): Response {
+  // RFC 9728: point clients at the protected-resource metadata to discover the auth server.
+  const origin = new URL(req.url).origin;
+  const metadata = `${origin}/.well-known/oauth-protected-resource`;
   return new Response(JSON.stringify({ error: message }), {
     status: 401,
-    headers: { ...JSON_HEADERS, "WWW-Authenticate": 'Bearer realm="agentbuff-mcp"' },
+    headers: { ...JSON_HEADERS, "WWW-Authenticate": `Bearer realm="agentbuff-mcp", resource_metadata="${metadata}"` },
   });
 }
 
 export async function POST(req: Request): Promise<Response> {
   const token = bearerFromHeader(req.headers.get("authorization"));
-  if (token === null) return unauthorized("Sertakan header Authorization: Bearer <token MCP>.");
+  if (token === null) return unauthorized("Sertakan header Authorization: Bearer <token MCP>.", req);
 
   const authed = await app.mcpGateway.authenticate(token);
-  if (authed === null) return unauthorized("Token MCP tidak valid atau sudah dicabut.");
+  if (authed === null) return unauthorized("Token MCP tidak valid atau sudah dicabut.", req);
 
   let body: unknown;
   try {
