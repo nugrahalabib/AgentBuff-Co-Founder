@@ -161,6 +161,44 @@ export function ProjectClient({
     }
   }
 
+  const [importing, setImporting] = useState(false);
+  async function importDoc(file: File) {
+    setImporting(true);
+    setError("");
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => reject(new Error("read"));
+        r.readAsDataURL(file);
+      });
+      const res = await fetch(`/api/projects/${projectId}/intake/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileDataUrl: dataUrl }),
+      });
+      const data = (await res.json()) as { intake?: Record<string, number>; error?: string };
+      if (!res.ok || data.intake === undefined) {
+        setError(data.error ?? "Gagal membaca dokumen.");
+        return;
+      }
+      const it = data.intake;
+      setForm((f) => ({
+        ...f,
+        price: it["price"] ?? f.price,
+        variable: it["unitCost"] ?? f.variable,
+        fixed: it["fixedMonthly"] ?? f.fixed,
+        capex: it["capex"] ?? f.capex,
+        working: it["workingCapital"] ?? f.working,
+        volume: it["volume"] ?? f.volume,
+      }));
+    } catch {
+      setError("Tidak bisa membaca/mengunggah dokumen.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function generateBrand() {
     setBusy("brand");
     setError("");
@@ -251,6 +289,23 @@ export function ProjectClient({
             </span>
           )}
         </div>
+
+        {/* Document import → pre-fill intake (human-in-the-loop). PRD §9.3.4.1 */}
+        <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-primary hover:underline">
+          <input
+            type="file"
+            accept="application/pdf,image/*"
+            className="hidden"
+            disabled={importing || busy !== null}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file !== undefined) void importDoc(file);
+              e.target.value = "";
+            }}
+          />
+          {importing ? "Membaca dokumen…" : "📄 Impor angka dari dokumen (PDF/foto daftar harga, nota) — bisa diedit"}
+        </label>
+
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <PlanField label="Harga/unit" value={form.price} onChange={setField("price")} />
           <PlanField label="Biaya var/unit" value={form.variable} onChange={setField("variable")} />

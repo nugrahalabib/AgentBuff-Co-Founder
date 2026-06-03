@@ -64,3 +64,19 @@ describe("PlannerService.generatePlan", () => {
     expect(plan.status).toBe("complete");
   });
 });
+
+describe("PlannerService.importIntake", () => {
+  it("extracts financial figures from a document via Document Understanding (§9.3.4.1)", async () => {
+    const understandDocument = vi.fn().mockResolvedValue({ price: 25000, unitCost: 9000, fixedMonthly: 4_000_000, volume: 500 });
+    const provider = { id: "mock", understandDocument } as unknown as LLMProvider;
+    const cred: Credential = { provider: "gemini", type: "api_key", secret: "x" };
+    const registry = { forTask: vi.fn().mockResolvedValue({ provider, cred }) } as unknown as ProviderRegistry;
+    const service = new PlannerService({ plans: new InMemoryRepository<BusinessPlan>(), registry, idGen: () => "x", now: () => "t" });
+
+    const intake = await service.importIntake("u1", "data:application/pdf;base64,QUJD");
+    expect(intake).toEqual({ price: 25000, unitCost: 9000, fixedMonthly: 4_000_000, volume: 500 });
+    // Routed to the doc-understanding task and passed the data URL + import schema.
+    expect((registry.forTask as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toBe("doc_understanding");
+    expect(understandDocument.mock.calls[0]![1]).toContain("data:application/pdf");
+  });
+});

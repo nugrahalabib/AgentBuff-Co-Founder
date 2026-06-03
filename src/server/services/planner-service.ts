@@ -26,6 +26,30 @@ export interface GeneratePlanInput {
   researchSummary?: string;
 }
 
+/** Financial figures extracted from an uploaded document to pre-fill the intake wizard. PRD §9.3.4.1. */
+export interface ImportedIntake {
+  price?: number;
+  unitCost?: number;
+  fixedMonthly?: number;
+  capex?: number;
+  workingCapital?: number;
+  volume?: number;
+}
+
+/** Schema the doc-understanding model fills from a price list / invoice / financial note. §9.3.4.1. */
+export const INTAKE_IMPORT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    price: { type: "number", description: "harga jual per unit (IDR)" },
+    unitCost: { type: "number", description: "biaya variabel/HPP per unit (IDR)" },
+    fixedMonthly: { type: "number", description: "total biaya tetap per bulan (IDR)" },
+    capex: { type: "number", description: "modal awal/peralatan (IDR)" },
+    workingCapital: { type: "number", description: "modal kerja (IDR)" },
+    volume: { type: "number", description: "perkiraan volume penjualan per bulan (unit)" },
+  },
+} as const;
+
 /** Narrative sections only — never numbers. PRD §9.3.6. */
 export const PLAN_NARRATIVE_SCHEMA = {
   type: "object",
@@ -62,6 +86,13 @@ function buildNarrativePrompt(input: GeneratePlanInput, financials: FinancialsRe
 
 export class PlannerService {
   constructor(private readonly deps: PlannerServiceDeps) {}
+
+  /** Extract financial figures from an uploaded document (PDF/image data URL) to pre-fill intake. §9.3.4.1.
+   *  Human-in-the-loop: the user reviews & edits before the engine computes — numbers stay deterministic. */
+  async importIntake(userId: string, fileDataUrl: string): Promise<ImportedIntake> {
+    const { provider, cred } = await this.deps.registry.forTask(userId, "doc_understanding");
+    return provider.understandDocument<ImportedIntake>(cred, fileDataUrl, INTAKE_IMPORT_SCHEMA);
+  }
 
   async generatePlan(userId: string, input: GeneratePlanInput): Promise<BusinessPlan> {
     // CODE DISPOSES: numbers first, deterministically — base case + three scenarios.
