@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { CredentialStatusChip } from "@/ui/credential-status-chip";
 
-/** Authenticated app top bar (PRD §14.3). Key/quota status is a placeholder until BYOK is wired. */
-export function AppHeader({ active }: { active?: "beranda" | "kalkulator" }) {
-  const link = (href: string, label: string, key: string) => (
+type Tab = "beranda" | "kalkulator" | "pengaturan";
+
+/** Authenticated app top bar (PRD §14.3) with a live BYOK credential-status chip.
+ *  Kept free of server-only imports so it works in both server and client pages. */
+export function AppHeader({ active }: { active?: Tab }) {
+  const link = (href: string, label: string, key: Tab) => (
     <Link
       href={href}
       className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
@@ -27,9 +31,8 @@ export function AppHeader({ active }: { active?: "beranda" | "kalkulator" }) {
         <nav className="flex items-center gap-1">
           {link("/dashboard", "Beranda", "beranda")}
           {link("/calculator", "Kalkulator", "kalkulator")}
-          <span className="ml-2 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground" title="Status kredensial AI">
-            BYOK belum ditautkan
-          </span>
+          {link("/pengaturan", "Pengaturan", "pengaturan")}
+          <CredentialStatusChip />
         </nav>
       </div>
     </header>

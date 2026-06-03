@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
-import { currentUserId } from "@/server/api-helpers";
+import { currentUserId, guardMutation } from "@/server/api-helpers";
 
 interface ProfileBody {
   displayName?: string;
@@ -13,6 +13,8 @@ interface ProfileBody {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const blocked = guardMutation(req);
+  if (blocked !== null) return blocked;
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Masuk dulu untuk menyimpan profil." }, { status: 401 });
 

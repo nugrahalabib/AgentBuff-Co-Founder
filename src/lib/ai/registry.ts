@@ -30,6 +30,11 @@ const ADAPTERS: Record<ProviderId, () => LLMProvider> = {
   openai_codex: () => new OpenAIAdapter(),
 };
 
+/** Construct the LLM adapter for a provider (shared by the registry and credential health checks). */
+export function adapterFor(provider: ProviderId): LLMProvider {
+  return ADAPTERS[provider]();
+}
+
 /** Capability each task class requires for capability-aware selection. Undefined = any provider works. */
 const TASK_CAPABILITY: Partial<Record<TaskClass, keyof Capabilities>> = {
   deep_research: "deepResearch",

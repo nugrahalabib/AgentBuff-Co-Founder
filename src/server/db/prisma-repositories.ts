@@ -6,7 +6,14 @@
 import { Prisma } from "@prisma/client";
 import type { Repository } from "@/server/domain/repositories";
 import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ProjectStatus, ResearchReport } from "@/server/domain/types";
-import type { CredentialStore, StoredCredential } from "@/lib/ai/credential-store";
+import type { CredentialMetaPatch, StoredCredential, UpsertableCredentialStore } from "@/lib/ai/credential-store";
+import type {
+  McpAuditEntry,
+  McpAuditStore,
+  McpClientRecord,
+  McpClientStore,
+  McpClientView,
+} from "@/server/mcp/client-store";
 import type { Capabilities, CredentialType, ProviderId } from "@/lib/ai/types";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "@/server/engine/research/index";
 import type { FinancialInputs, FinancialsResult } from "@/server/engine/financial/index";
@@ -131,6 +138,7 @@ class PrismaPlanRepository implements Repository<BusinessPlan> {
       version: row.version,
       inputs: row.inputs as unknown as FinancialInputs,
       financials: row.financials as unknown as FinancialsResult,
+      scenarios: (row.scenarios as unknown as BusinessPlan["scenarios"]) ?? undefined,
       narrative: (row.narrative as unknown as Record<string, string> | null) ?? undefined,
       stale: row.stale,
       generatedAt: row.generatedAt.toISOString(),
@@ -142,6 +150,7 @@ class PrismaPlanRepository implements Repository<BusinessPlan> {
       version: p.version,
       inputs: json(p.inputs),
       financials: json(p.financials),
+      scenarios: p.scenarios === undefined ? Prisma.JsonNull : json(p.scenarios),
       narrative: p.narrative === undefined ? Prisma.JsonNull : json(p.narrative),
       stale: p.stale,
       generatedAt: new Date(p.generatedAt),
@@ -159,7 +168,10 @@ class PrismaPlanRepository implements Repository<BusinessPlan> {
 }
 
 // ---------- ByokCredential ----------
-class PrismaCredentialStore implements CredentialStore {
+const asProvider = (p: ProviderId): Prisma.ByokCredentialCreateInput["provider"] =>
+  p as Prisma.ByokCredentialCreateInput["provider"];
+
+class PrismaCredentialStore implements UpsertableCredentialStore {
   async listForUser(userId: string): Promise<StoredCredential[]> {
     const rows = await prisma.byokCredential.findMany({ where: { userId } });
     return rows.map((r) => ({
@@ -184,18 +196,140 @@ class PrismaCredentialStore implements CredentialStore {
       lastValidatedAt: new Date(),
     };
     await prisma.byokCredential.upsert({
-      where: { userId_provider: { userId: c.userId, provider: c.provider as Prisma.ByokCredentialCreateInput["provider"] } },
-      create: { user: { connect: { id: c.userId } }, provider: c.provider as Prisma.ByokCredentialCreateInput["provider"], ...fields },
+      where: { userId_provider: { userId: c.userId, provider: asProvider(c.provider) } },
+      create: { user: { connect: { id: c.userId } }, provider: asProvider(c.provider), ...fields },
       update: fields,
     });
+    // A newly-defaulted credential demotes the others (one default per user).
+    if (c.isDefault) {
+      await prisma.byokCredential.updateMany({
+        where: { userId: c.userId, provider: { not: asProvider(c.provider) } },
+        data: { isDefault: false },
+      });
+    }
+  }
+  async remove(userId: string, provider: ProviderId): Promise<boolean> {
+    const res = await prisma.byokCredential.deleteMany({ where: { userId, provider: asProvider(provider) } });
+    return res.count > 0;
+  }
+  async setDefault(userId: string, provider: ProviderId): Promise<boolean> {
+    const target = await prisma.byokCredential.findUnique({
+      where: { userId_provider: { userId, provider: asProvider(provider) } },
+    });
+    if (target === null) return false;
+    await prisma.$transaction([
+      prisma.byokCredential.updateMany({ where: { userId }, data: { isDefault: false } }),
+      prisma.byokCredential.update({
+        where: { userId_provider: { userId, provider: asProvider(provider) } },
+        data: { isDefault: true },
+      }),
+    ]);
+    return true;
+  }
+  async patchMeta(userId: string, provider: ProviderId, patch: CredentialMetaPatch): Promise<boolean> {
+    const data: Prisma.ByokCredentialUpdateManyMutationInput = { lastValidatedAt: new Date() };
+    if (patch.status !== undefined) data.status = patch.status as Prisma.ByokCredentialCreateInput["status"];
+    if (patch.capabilities !== undefined) data.capabilities = json(patch.capabilities);
+    const res = await prisma.byokCredential.updateMany({ where: { userId, provider: asProvider(provider) }, data });
+    return res.count > 0;
   }
 }
 
-/** Ensure a (guest) User row exists so FK-constrained rows can reference it. */
+// ---------- MCP client tokens + audit log ----------
+class PrismaMcpClientStore implements McpClientStore {
+  async create(rec: McpClientRecord): Promise<void> {
+    await prisma.mcpClient.create({
+      data: {
+        id: rec.id,
+        name: rec.name,
+        owner: { connect: { id: rec.ownerUserId } },
+        oauthClientId: rec.id, // PAT mode: reuse the row id as the (unique) client id
+        scopes: ["tools"],
+        tokenHash: rec.tokenHash,
+        tokenPrefix: rec.tokenPrefix,
+        status: rec.status,
+        createdAt: new Date(rec.createdAt),
+      },
+    });
+  }
+  async findActiveByTokenHash(hash: string): Promise<McpClientRecord | null> {
+    const r = await prisma.mcpClient.findFirst({ where: { tokenHash: hash, status: "active" } });
+    if (r === null || r.tokenHash === null || r.tokenPrefix === null) return null;
+    return {
+      id: r.id,
+      ownerUserId: r.ownerUserId,
+      name: r.name,
+      tokenHash: r.tokenHash,
+      tokenPrefix: r.tokenPrefix,
+      status: r.status as McpClientRecord["status"],
+      createdAt: r.createdAt.toISOString(),
+      lastUsedAt: r.lastUsedAt?.toISOString(),
+    };
+  }
+  async listForUser(userId: string): Promise<McpClientView[]> {
+    const rows = await prisma.mcpClient.findMany({ where: { ownerUserId: userId }, orderBy: { createdAt: "desc" } });
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      tokenPrefix: r.tokenPrefix ?? "—",
+      status: r.status as McpClientView["status"],
+      createdAt: r.createdAt.toISOString(),
+      lastUsedAt: r.lastUsedAt?.toISOString(),
+    }));
+  }
+  async revoke(userId: string, clientId: string): Promise<boolean> {
+    const res = await prisma.mcpClient.updateMany({
+      where: { id: clientId, ownerUserId: userId, status: "active" },
+      data: { status: "revoked" },
+    });
+    return res.count > 0;
+  }
+  async touch(clientId: string, atIso: string): Promise<void> {
+    await prisma.mcpClient.update({ where: { id: clientId }, data: { lastUsedAt: new Date(atIso) } }).catch(() => undefined);
+  }
+}
+
+class PrismaMcpAuditStore implements McpAuditStore {
+  async record(entry: McpAuditEntry): Promise<void> {
+    await prisma.mcpAuditLog
+      .create({
+        data: {
+          client: { connect: { id: entry.clientId } },
+          userId: entry.userId,
+          tool: entry.tool,
+          argsHash: entry.argsHash ?? null,
+          resultStatus: entry.resultStatus,
+          ts: new Date(entry.ts),
+        },
+      })
+      .catch(() => undefined); // audit must never break a tool call
+  }
+  async listForUser(userId: string, limit = 50): Promise<McpAuditEntry[]> {
+    const rows = await prisma.mcpAuditLog.findMany({ where: { userId }, orderBy: { ts: "desc" }, take: limit });
+    return rows.map((r) => ({
+      clientId: r.clientId,
+      userId: r.userId,
+      tool: r.tool,
+      argsHash: r.argsHash ?? undefined,
+      resultStatus: r.resultStatus as McpAuditEntry["resultStatus"],
+      ts: r.ts.toISOString(),
+    }));
+  }
+}
+
+/**
+ * Ensure a User row exists so FK-constrained rows can reference it.
+ * Google users are normally created earlier by the sign-in event (persistGoogleUser); this is a
+ * fallback that still records a real googleSub for `google:<sub>` ids and a guest placeholder otherwise.
+ */
 export async function ensureUser(userId: string): Promise<void> {
+  const isGoogle = userId.startsWith("google:");
+  const googleSub = isGoogle ? userId.slice("google:".length) : `guest:${userId}`;
+  const email = isGoogle ? `${userId}@google.local` : `${userId}@guest.local`;
+  const displayName = isGoogle ? "Pengguna" : "Tamu";
   await prisma.user.upsert({
     where: { id: userId },
-    create: { id: userId, googleSub: `guest:${userId}`, email: `${userId}@guest.local`, displayName: "Tamu" },
+    create: { id: userId, googleSub, email, displayName },
     update: {},
   });
 }
@@ -231,6 +365,8 @@ export interface PrismaPersistence {
   reports: PrismaResearchRepository;
   plans: PrismaPlanRepository;
   credentials: PrismaCredentialStore;
+  mcpClients: PrismaMcpClientStore;
+  mcpAudit: PrismaMcpAuditStore;
   ensureUser: (userId: string) => Promise<void>;
   saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   getProfile: (userId: string) => Promise<OnboardingProfile | null>;
@@ -242,6 +378,8 @@ export function createPrismaPersistence(): PrismaPersistence {
     reports: new PrismaResearchRepository(),
     plans: new PrismaPlanRepository(),
     credentials: new PrismaCredentialStore(),
+    mcpClients: new PrismaMcpClientStore(),
+    mcpAudit: new PrismaMcpAuditStore(),
     ensureUser,
     saveProfile: savePrismaProfile,
     getProfile: getPrismaProfile,

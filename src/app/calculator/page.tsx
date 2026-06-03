@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { AppHeader } from "@/ui/app-header";
 import { Button } from "@/ui/button";
-import type { FinancialsResult } from "@/server/engine/financial/index";
+import { CashFlowChart } from "@/ui/cash-flow-chart";
+import type { FinancialsResult, ScenarioKpis, ScenarioSummarySet } from "@/server/engine/financial/index";
+
+type FinancialsResponse = FinancialsResult & { scenarios?: ScenarioSummarySet };
 
 const idr = (n: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
@@ -35,7 +38,7 @@ const DEFAULTS: Form = {
 
 export default function CalculatorPage() {
   const [form, setForm] = useState<Form>(DEFAULTS);
-  const [result, setResult] = useState<FinancialsResult | null>(null);
+  const [result, setResult] = useState<FinancialsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -65,7 +68,7 @@ export default function CalculatorPage() {
           },
         }),
       });
-      const data = (await res.json()) as FinancialsResult & { error?: string };
+      const data = (await res.json()) as FinancialsResponse & { error?: string };
       if (!res.ok) {
         setError(data.error ?? "Gagal menghitung.");
         setResult(null);
@@ -167,8 +170,8 @@ function Kpi({ label, value, tone = "default" }: { label: string; value: string;
   );
 }
 
-function Results({ result }: { result: FinancialsResult }) {
-  const { unitEconomics: ue, breakEven: be, capital: cap, returns: ret, projections, warnings } = result;
+function Results({ result }: { result: FinancialsResponse }) {
+  const { unitEconomics: ue, breakEven: be, capital: cap, returns: ret, projections, warnings, scenarios } = result;
   const preview = projections.filter((_, i) => i < 6 || i === projections.length - 1);
 
   return (
@@ -201,6 +204,15 @@ function Results({ result }: { result: FinancialsResult }) {
         </ul>
       )}
 
+      {/* Cash-flow / profit chart (deterministic, plotted from engine output). PRD §9.3.9 */}
+      <div>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Proyeksi kas kumulatif &amp; laba bersih</p>
+        <CashFlowChart projections={projections} />
+      </div>
+
+      {/* Scenario comparison. PRD §9.3.9 */}
+      {scenarios !== undefined && <ScenarioTable scenarios={scenarios} />}
+
       <div className="overflow-x-auto">
         <table className="w-full text-right text-xs tabular-nums">
           <thead className="text-muted-foreground">
@@ -226,6 +238,52 @@ function Results({ result }: { result: FinancialsResult }) {
       <p className="text-[11px] text-muted-foreground">
         Estimasi berbasis asumsi — bukan jaminan, bukan nasihat finansial profesional.
       </p>
+    </div>
+  );
+}
+
+function ScenarioTable({ scenarios }: { scenarios: ScenarioSummarySet }) {
+  const cols: { key: keyof ScenarioSummarySet; tone: string }[] = [
+    { key: "pessimistic", tone: "text-destructive" },
+    { key: "realistic", tone: "text-foreground" },
+    { key: "optimistic", tone: "text-accent" },
+  ];
+  const rows: { label: string; get: (s: ScenarioKpis) => string }[] = [
+    { label: "BEP / bulan", get: (s) => (s.bepUnitsPerMonthRounded === null ? "—" : `${s.bepUnitsPerMonthRounded} unit`) },
+    { label: "Payback", get: (s) => (s.paybackPeriodMonths === null ? "> horizon" : `${s.paybackPeriodMonths} bln`) },
+    { label: "ROI (horizon)", get: (s) => pct(s.roiPct) },
+    { label: "Laba total", get: (s) => idr(s.totalNetProfitHorizon) },
+    { label: "Kas akhir", get: (s) => idr(s.finalCumulativeCash) },
+  ];
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">Skenario (deterministik)</p>
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead className="bg-muted/50 text-muted-foreground">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium">Metrik</th>
+              {cols.map((c) => (
+                <th key={c.key} className={`px-2 py-1.5 font-semibold ${c.tone}`}>
+                  {scenarios[c.key].label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-t border-border/50">
+                <td className="px-2 py-1.5 text-left text-muted-foreground">{r.label}</td>
+                {cols.map((c) => (
+                  <td key={c.key} className="px-2 py-1.5">
+                    {r.get(scenarios[c.key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

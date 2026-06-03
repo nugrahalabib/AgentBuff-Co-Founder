@@ -12,13 +12,15 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  googleSub   String   @unique
-  email       String   @unique
+  id          String    @id @default(cuid())
+  googleSub   String    @unique
+  email       String    @unique
   displayName String?
-  locale      String   @default("id")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  avatarUrl   String?
+  locale      String    @default("id")
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   credentials ByokCredential[]
   onboarding  OnboardingProfile?
@@ -144,6 +146,7 @@ model BusinessPlan {
   version     Int      @default(1)
   inputs      Json
   financials  Json // deterministic engine output — never authored by an LLM
+  scenarios   Json? // pessimistic/realistic/optimistic KPI summaries (deterministic)
   narrative   Json?
   stale       Boolean  @default(false)
   generatedAt DateTime @default(now())
@@ -216,6 +219,10 @@ model McpClient {
   owner         User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   oauthClientId String        @unique
   scopes        String[]
+  // Personal access token (Streamable-HTTP bearer). Stored ONLY as a SHA-256 hash; prefix is for display.
+  tokenHash     String?       @unique
+  tokenPrefix   String?
+  lastUsedAt    DateTime?
   status        String        @default("active")
   createdAt     DateTime      @default(now())
   auditLogs     McpAuditLog[]

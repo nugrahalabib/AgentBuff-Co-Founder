@@ -4,6 +4,18 @@
 // import from here only.
 
 export { computeFinancials, validateInputs } from "./engine";
+export {
+  computeScenarios,
+  computeScenarioSummaries,
+  summarizeScenario,
+  applyScenarioAdjustment,
+  DEFAULT_SCENARIO_ADJUSTMENTS,
+  type ScenarioKey,
+  type ScenarioAdjustment,
+  type ScenarioSet,
+  type ScenarioKpis,
+  type ScenarioSummarySet,
+} from "./scenarios";
 export { roundIDR, roundTo, ratio, sumAmounts } from "./money";
 export { projectUnits } from "./growth";
 export { amortize, type LoanScheduleEntry } from "./loan";

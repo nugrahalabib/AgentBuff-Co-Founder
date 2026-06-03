@@ -73,9 +73,21 @@ describe("MCP tool catalog", () => {
       "agentbuff.list_projects",
       "agentbuff.get_project",
       "agentbuff.calculate_financials",
+      "agentbuff.compute_scenarios",
       "agentbuff.validate_idea",
       "agentbuff.generate_business_plan",
     ]);
+  });
+
+  it("compute_scenarios returns three deterministic KPI sets, ordered by ROI", async () => {
+    const { tools, ctxFor } = makeWorld();
+    const res = (await tools.call(
+      "agentbuff.compute_scenarios",
+      { pricing: { unit_price: 20_000 }, costs: { variable_cost_per_unit: 10_000, fixed_costs_monthly: 5_000_000 }, assumptions: { monthly_volume: 600 } },
+      ctxFor("u1"),
+    )) as Record<"pessimistic" | "realistic" | "optimistic", { label: string; roiPct: number }>;
+    expect(res.realistic.label).toBe("Realistis");
+    expect(res.pessimistic.roiPct).toBeLessThanOrEqual(res.optimistic.roiPct);
   });
 
   it("runs the full build-a-business flow over the same engine the UI uses", async () => {

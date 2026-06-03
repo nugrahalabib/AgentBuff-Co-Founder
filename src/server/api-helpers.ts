@@ -12,6 +12,32 @@ export interface SessionUser {
   isNew: boolean;
 }
 
+/**
+ * CSRF defense for cookie-authenticated mutating routes: require the request to be same-origin.
+ * Browsers always attach `Origin` (and/or `Sec-Fetch-Site`) to cross-site mutations; a forged
+ * cross-site POST therefore fails this check. Same-origin app fetches pass. PRD §13.4.
+ */
+export function isSameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (origin !== null && origin !== "") {
+    const host = req.headers.get("host");
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
+  }
+  // No Origin (e.g. same-origin navigations / non-browser clients): fall back to Fetch Metadata.
+  const site = req.headers.get("sec-fetch-site");
+  return site === null || site === "same-origin" || site === "none";
+}
+
+/** Returns a 403 response when the mutation is cross-origin, else null (proceed). */
+export function guardMutation(req: Request): NextResponse | null {
+  if (isSameOrigin(req)) return null;
+  return NextResponse.json({ error: "Permintaan lintas-asal ditolak." }, { status: 403 });
+}
+
 /** The logged-in Google user id (`google:<sub>`), or null. */
 async function googleUserId(): Promise<string | null> {
   try {

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/ui/button";
+import { CashFlowChart } from "@/ui/cash-flow-chart";
 import type { BusinessPlan, ResearchReport } from "@/server/domain/types";
-import type { FinancialInputs } from "@/server/engine/financial/index";
+import type { FinancialInputs, ScenarioKpis, ScenarioSummarySet } from "@/server/engine/financial/index";
 
 const idr = (n: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
@@ -129,7 +130,7 @@ export function ProjectClient({
         <p className="rounded-card border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {error}{" "}
           {error.includes("key") && (
-            <Link href="/onboarding" className="font-semibold underline">
+            <Link href="/pengaturan" className="font-semibold underline">
               Tautkan sekarang
             </Link>
           )}
@@ -187,7 +188,14 @@ export function ProjectClient({
 
       {/* Plan */}
       <section className="rounded-card border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold">2 · Business Plan</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">2 · Business Plan</h2>
+          {plan?.stale === true && (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning" title="Riset diperbarui — susun ulang plan agar konsisten">
+              Perlu diperbarui
+            </span>
+          )}
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <PlanField label="Harga/unit" value={form.price} onChange={setField("price")} />
           <PlanField label="Biaya var/unit" value={form.variable} onChange={setField("variable")} />
@@ -210,6 +218,13 @@ export function ProjectClient({
               <Kpi label="Payback" value={plan.financials.returns.paybackPeriodMonths === null ? "> horizon" : `${plan.financials.returns.paybackPeriodMonths} bln`} />
               <Kpi label="ROI" value={pct(plan.financials.returns.roiPct)} />
             </div>
+
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Proyeksi kas kumulatif &amp; laba bersih</p>
+              <CashFlowChart projections={plan.financials.projections} />
+            </div>
+
+            {plan.scenarios !== undefined && <PlanScenarios scenarios={plan.scenarios} />}
             {plan.narrative !== undefined && (
               <div className="space-y-3">
                 {Object.entries(plan.narrative).map(([k, v]) => (
@@ -220,9 +235,58 @@ export function ProjectClient({
                 ))}
               </div>
             )}
+            <p className="border-t border-border pt-3 text-[11px] text-muted-foreground">
+              Angka di atas dihitung engine deterministik dari asumsimu — <strong>estimasi</strong>, bukan jaminan hasil
+              maupun nasihat finansial profesional. Narasi disusun AI dengan angka yang sama (tidak mengarang angka).
+            </p>
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function PlanScenarios({ scenarios }: { scenarios: ScenarioSummarySet }) {
+  const cols: { key: keyof ScenarioSummarySet; tone: string }[] = [
+    { key: "pessimistic", tone: "text-destructive" },
+    { key: "realistic", tone: "text-foreground" },
+    { key: "optimistic", tone: "text-accent" },
+  ];
+  const rows: { label: string; get: (s: ScenarioKpis) => string }[] = [
+    { label: "Payback", get: (s) => (s.paybackPeriodMonths === null ? "> horizon" : `${s.paybackPeriodMonths} bln`) },
+    { label: "ROI", get: (s) => pct(s.roiPct) },
+    { label: "Laba total", get: (s) => idr(s.totalNetProfitHorizon) },
+    { label: "Kas akhir", get: (s) => idr(s.finalCumulativeCash) },
+  ];
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">Skenario (deterministik)</p>
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead className="bg-muted/50 text-muted-foreground">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium">Metrik</th>
+              {cols.map((c) => (
+                <th key={c.key} className={`px-2 py-1.5 font-semibold ${c.tone}`}>
+                  {scenarios[c.key].label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-t border-border/50">
+                <td className="px-2 py-1.5 text-left text-muted-foreground">{r.label}</td>
+                {cols.map((c) => (
+                  <td key={c.key} className="px-2 py-1.5">
+                    {r.get(scenarios[c.key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

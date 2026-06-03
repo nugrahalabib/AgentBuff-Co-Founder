@@ -20,9 +20,21 @@ export interface CredentialStore {
   listForUser(userId: string): Promise<StoredCredential[]>;
 }
 
-/** A credential store that also supports linking/replacing a credential. */
+/** Patchable subset of credential metadata (never the secret). */
+export interface CredentialMetaPatch {
+  status?: StoredCredential["status"];
+  capabilities?: Capabilities;
+}
+
+/** A credential store that supports linking/replacing, removing, and managing credentials. */
 export interface UpsertableCredentialStore extends CredentialStore {
   upsert(cred: StoredCredential): void | Promise<void>;
+  /** Remove a (userId, provider) credential entirely. Returns true if one existed. */
+  remove(userId: string, provider: ProviderId): boolean | Promise<boolean>;
+  /** Make `provider` the user's default; clears the default flag on the others. */
+  setDefault(userId: string, provider: ProviderId): boolean | Promise<boolean>;
+  /** Patch non-secret metadata (e.g. after re-validating liveness). */
+  patchMeta(userId: string, provider: ProviderId, patch: CredentialMetaPatch): boolean | Promise<boolean>;
 }
 
 /** In-memory store for tests/dev; the Prisma-backed store implements the same interface. */
@@ -39,6 +51,28 @@ export class InMemoryCredentialStore implements UpsertableCredentialStore {
     const i = this.creds.findIndex((c) => c.userId === cred.userId && c.provider === cred.provider);
     if (i >= 0) this.creds[i] = cred;
     else this.creds.push(cred);
+  }
+  remove(userId: string, provider: ProviderId): boolean {
+    const i = this.creds.findIndex((c) => c.userId === userId && c.provider === provider);
+    if (i < 0) return false;
+    this.creds.splice(i, 1);
+    return true;
+  }
+  setDefault(userId: string, provider: ProviderId): boolean {
+    let found = false;
+    for (const c of this.creds) {
+      if (c.userId !== userId) continue;
+      c.isDefault = c.provider === provider;
+      if (c.provider === provider) found = true;
+    }
+    return found;
+  }
+  patchMeta(userId: string, provider: ProviderId, patch: CredentialMetaPatch): boolean {
+    const c = this.creds.find((x) => x.userId === userId && x.provider === provider);
+    if (c === undefined) return false;
+    if (patch.status !== undefined) c.status = patch.status;
+    if (patch.capabilities !== undefined) c.capabilities = patch.capabilities;
+    return true;
   }
   async listForUser(userId: string): Promise<StoredCredential[]> {
     return this.creds.filter((c) => c.userId === userId);

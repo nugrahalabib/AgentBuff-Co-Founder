@@ -72,15 +72,15 @@ describe("OpenAIAdapter.validateCredential", () => {
 
 describe("OpenAIAdapter.generateStructured", () => {
   it("sends a strict json_schema and parses the result", async () => {
-    const fn = stubFetch(fakeResponse(200, message([{ type: "output_text", text: '{"a":1,"b":"x"}', annotations: [] }])));
-    const schema = { type: "object", properties: { a: { type: "number" } }, additionalProperties: false };
+    const fn = stubFetch(fakeResponse(200, message([{ type: "output_text", text: '{"a":1}', annotations: [] }])));
+    const schema = { type: "object", properties: { a: { type: "number" } }, required: ["a"], additionalProperties: false };
     const out = await new OpenAIAdapter().generateStructured(cred, "prompt", {
       jsonSchema: schema,
       reasoning: "high",
       systemPrompt: "You are an analyst.",
     });
 
-    expect(out).toEqual({ a: 1, b: "x" });
+    expect(out).toEqual({ a: 1 });
     expect(fn.mock.calls[0]![0]).toBe("https://api.openai.com/v1/responses");
 
     const body = requestBody(fn);
@@ -99,16 +99,29 @@ describe("OpenAIAdapter.generateStructured", () => {
     );
   });
 
-  it("throws on a top-level API error and on non-JSON output", async () => {
+  it("throws on a top-level API error", async () => {
     stubFetch(fakeResponse(200, { error: { message: "bad request" } }));
     await expect(new OpenAIAdapter().generateStructured(cred, "p", { jsonSchema: {} })).rejects.toBeInstanceOf(
       OpenAIApiError,
     );
+  });
 
-    vi.unstubAllGlobals();
-    stubFetch(fakeResponse(200, message([{ type: "output_text", text: "not json", annotations: [] }])));
-    await expect(new OpenAIAdapter().generateStructured(cred, "p", { jsonSchema: {} })).rejects.toThrow(
-      /bukan JSON/i,
+  it("repairs once when the first output is invalid, then returns the valid retry", async () => {
+    stubFetch(
+      fakeResponse(200, message([{ type: "output_text", text: "not json", annotations: [] }])),
+      fakeResponse(200, message([{ type: "output_text", text: '{"a":1}', annotations: [] }])),
+    );
+    const out = await new OpenAIAdapter().generateStructured(cred, "p", { jsonSchema: { type: "object" } });
+    expect(out).toEqual({ a: 1 });
+  });
+
+  it("throws after one failed repair attempt", async () => {
+    stubFetch(
+      fakeResponse(200, message([{ type: "output_text", text: "not json", annotations: [] }])),
+      fakeResponse(200, message([{ type: "output_text", text: "still not json", annotations: [] }])),
+    );
+    await expect(new OpenAIAdapter().generateStructured(cred, "p", { jsonSchema: { type: "object" } })).rejects.toThrow(
+      /tidak valid terhadap schema/i,
     );
   });
 });

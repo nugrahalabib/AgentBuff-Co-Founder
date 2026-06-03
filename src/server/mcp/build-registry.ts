@@ -8,6 +8,7 @@ import { McpError, type McpContext } from "./types";
 import {
   CALCULATE_FINANCIALS_INPUT_SCHEMA,
   calculateFinancials,
+  calculateScenarios,
   type CalculateFinancialsInput,
 } from "./tools/calculate-financials";
 
@@ -67,6 +68,13 @@ export function buildToolRegistry(): McpToolRegistry {
     description: "Hitung HPP/BEP/proyeksi/payback/ROI deterministik. Tidak memanggil LLM.",
     inputSchema: CALCULATE_FINANCIALS_INPUT_SCHEMA,
     handler: async (input: CalculateFinancialsInput) => calculateFinancials(input),
+  });
+
+  registry.register({
+    name: "agentbuff.compute_scenarios",
+    description: "Hitung skenario Pesimistis/Realistis/Optimistis (KPI deterministik). Tidak memanggil LLM.",
+    inputSchema: CALCULATE_FINANCIALS_INPUT_SCHEMA,
+    handler: async (input: CalculateFinancialsInput) => calculateScenarios(input),
   });
 
   registry.register({

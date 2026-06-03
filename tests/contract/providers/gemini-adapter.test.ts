@@ -104,11 +104,33 @@ describe("GeminiAdapter.generateStructured", () => {
     ).rejects.toBeInstanceOf(GeminiApiError);
   });
 
-  it("throws when the output is not valid JSON", async () => {
-    stubFetch(fakeResponse(200, { candidates: [{ content: { parts: [{ text: "not json" }] } }] }));
-    await expect(
-      new GeminiAdapter().generateStructured(cred, "p", { jsonSchema: {} }),
-    ).rejects.toThrow(/bukan JSON/i);
+  it("returns the repaired output when the first attempt is invalid but the second is valid", async () => {
+    stubFetch(
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: "not json" }] } }] }),
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }),
+    );
+    const out = await new GeminiAdapter().generateStructured(cred, "p", { jsonSchema: { type: "object" } });
+    expect(out).toEqual({ a: 1 });
+  });
+
+  it("throws after one repair attempt if the output is still invalid", async () => {
+    stubFetch(
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: "not json" }] } }] }),
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: "still not json" }] } }] }),
+    );
+    await expect(new GeminiAdapter().generateStructured(cred, "p", { jsonSchema: { type: "object" } })).rejects.toThrow(
+      /tidak valid terhadap schema/i,
+    );
+  });
+
+  it("rejects output that violates the schema (additionalProperties:false)", async () => {
+    const schema = { type: "object", properties: { a: { type: "number" } }, required: ["a"], additionalProperties: false };
+    stubFetch(
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: '{"a":1,"x":2}' }] } }] }),
+      fakeResponse(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }),
+    );
+    const out = await new GeminiAdapter().generateStructured(cred, "p", { jsonSchema: schema });
+    expect(out).toEqual({ a: 1 }); // first (extra prop) rejected, repaired second accepted
   });
 });
 

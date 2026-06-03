@@ -3,7 +3,13 @@
 // simple MCP wire schema onto FinancialInputs and calls the SAME computeFinancials the UI uses, so
 // headless == UI (PRD §9.6.1). This is the canonical demonstration of "Single Engine, Multi-Adapter".
 
-import { computeFinancials, type FinancialInputs, type FinancialsResult } from "../../engine/financial/index";
+import {
+  computeFinancials,
+  computeScenarioSummaries,
+  type FinancialInputs,
+  type FinancialsResult,
+  type ScenarioSummarySet,
+} from "../../engine/financial/index";
 
 /** MCP input shape (§20.3 agentbuff.calculate_financials inputSchema). */
 export interface CalculateFinancialsInput {
@@ -85,4 +91,9 @@ export function mapToFinancialInputs(input: CalculateFinancialsInput): Financial
 /** Tool handler: deterministic financials from the MCP wire form. Throws FinancialInputError on bad input. */
 export function calculateFinancials(input: CalculateFinancialsInput): FinancialsResult {
   return computeFinancials(mapToFinancialInputs(input));
+}
+
+/** Deterministic pessimistic/realistic/optimistic KPI summaries from the same wire form. PRD §9.3.9. */
+export function calculateScenarios(input: CalculateFinancialsInput): ScenarioSummarySet {
+  return computeScenarioSummaries(mapToFinancialInputs(input));
 }

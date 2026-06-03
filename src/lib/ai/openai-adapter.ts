@@ -12,6 +12,8 @@
 import type { LLMProvider, StructuredOpts, ImageOpts } from "./llm-provider";
 import type { Capabilities, Citation, Credential, DeepResearchHandle, GroundedResult, TaskClass } from "./types";
 import { resolveModel } from "./model-routing";
+import { withRetry } from "./retry";
+import { parseAndValidate } from "./schema-validate";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
 
@@ -127,26 +129,29 @@ export class OpenAIAdapter implements LLMProvider {
   readonly id = "openai";
 
   private async responses(cred: Credential, body: Record<string, unknown>): Promise<OAResponse> {
-    let res: Response;
-    try {
-      res = await fetch(`${OPENAI_BASE}/responses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cred.secret}` },
-        body: JSON.stringify(body),
-      });
-    } catch {
-      throw new OpenAIApiError("Gagal menghubungi OpenAI API.", 0, true);
-    }
-    if (!res.ok) {
-      const c = classifyValidationStatus(res.status);
-      const detail = c.kind === "ok" ? "" : c.detail;
-      throw new OpenAIApiError(detail || `OpenAI API error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
-    }
-    const data = (await res.json()) as OAResponse;
-    if (data.error !== null && data.error !== undefined) {
-      throw new OpenAIApiError(data.error.message ?? "OpenAI mengembalikan error.", 200, false);
-    }
-    return data;
+    // Retry transient (429/5xx/network) errors with exponential backoff. PRD §12.5.
+    return withRetry(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${OPENAI_BASE}/responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${cred.secret}` },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        throw new OpenAIApiError("Gagal menghubungi OpenAI API.", 0, true);
+      }
+      if (!res.ok) {
+        const c = classifyValidationStatus(res.status);
+        const detail = c.kind === "ok" ? "" : c.detail;
+        throw new OpenAIApiError(detail || `OpenAI API error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
+      }
+      const data = (await res.json()) as OAResponse;
+      if (data.error !== null && data.error !== undefined) {
+        throw new OpenAIApiError(data.error.message ?? "OpenAI mengembalikan error.", 200, false);
+      }
+      return data;
+    });
   }
 
   async validateCredential(
@@ -201,21 +206,27 @@ export class OpenAIAdapter implements LLMProvider {
 
   async generateStructured<T = unknown>(cred: Credential, prompt: string, opts: StructuredOpts): Promise<T> {
     const model = requireModel(opts.task ?? "reasoning_heavy");
-    const body: Record<string, unknown> = {
-      model,
-      input: prompt,
-      text: { format: { type: "json_schema", name: "structured_output", strict: true, schema: opts.jsonSchema } },
+    const makeBody = (input: string): Record<string, unknown> => {
+      const body: Record<string, unknown> = {
+        model,
+        input,
+        text: { format: { type: "json_schema", name: "structured_output", strict: true, schema: opts.jsonSchema } },
+      };
+      if (opts.systemPrompt !== undefined) body["instructions"] = opts.systemPrompt;
+      if (opts.reasoning !== undefined) body["reasoning"] = { effort: mapReasoningEffort(opts.reasoning) };
+      return body;
     };
-    if (opts.systemPrompt !== undefined) body["instructions"] = opts.systemPrompt;
-    if (opts.reasoning !== undefined) body["reasoning"] = { effort: mapReasoningEffort(opts.reasoning) };
 
-    const data = await this.responses(cred, body);
-    const { text } = extractMessage(data);
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new OpenAIApiError("Output OpenAI bukan JSON yang valid untuk schema yang diminta.", 200, false);
-    }
+    // generate → validate against JSON Schema → one repair attempt → else fail. PRD §12.5.
+    const first = extractMessage(await this.responses(cred, makeBody(prompt))).text;
+    const r1 = parseAndValidate<T>(first, opts.jsonSchema);
+    if (r1.ok) return r1.value;
+
+    const repairPrompt = `${prompt}\n\nCATATAN: Output JSON sebelumnya TIDAK valid terhadap schema (${r1.errors}). Kembalikan HANYA JSON valid persis sesuai schema, tanpa teks lain.`;
+    const second = extractMessage(await this.responses(cred, makeBody(repairPrompt))).text;
+    const r2 = parseAndValidate<T>(second, opts.jsonSchema);
+    if (r2.ok) return r2.value;
+    throw new OpenAIApiError(`Output OpenAI tidak valid terhadap schema setelah perbaikan (${r2.errors}).`, 200, false);
   }
 
   async groundedSearch(

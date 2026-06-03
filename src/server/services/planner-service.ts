@@ -5,7 +5,12 @@
 
 import type { Repository } from "../domain/repositories";
 import type { BusinessPlan } from "../domain/types";
-import { computeFinancials, type FinancialInputs, type FinancialsResult } from "../engine/financial/index";
+import {
+  computeFinancials,
+  computeScenarioSummaries,
+  type FinancialInputs,
+  type FinancialsResult,
+} from "../engine/financial/index";
 import type { ProviderRegistry } from "../../lib/ai/llm-provider";
 
 export interface PlannerServiceDeps {
@@ -59,8 +64,9 @@ export class PlannerService {
   constructor(private readonly deps: PlannerServiceDeps) {}
 
   async generatePlan(userId: string, input: GeneratePlanInput): Promise<BusinessPlan> {
-    // CODE DISPOSES: numbers first, deterministically.
+    // CODE DISPOSES: numbers first, deterministically — base case + three scenarios.
     const financials = computeFinancials(input.inputs);
+    const scenarios = computeScenarioSummaries(input.inputs);
 
     // LLM PROPOSES the narrative, with the final numbers injected.
     const { provider, cred } = await this.deps.registry.forTask(userId, "reasoning_heavy");
@@ -77,6 +83,7 @@ export class PlannerService {
       version: 1,
       inputs: input.inputs,
       financials,
+      scenarios,
       narrative,
       stale: false,
       generatedAt: this.deps.now(),

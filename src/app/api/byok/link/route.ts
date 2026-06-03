@@ -6,7 +6,7 @@ import { OpenAIAdapter } from "@/lib/ai/openai-adapter";
 import type { Credential } from "@/lib/ai/types";
 import { encryptSecret, fingerprint } from "@/lib/crypto";
 import { app } from "@/server/runtime";
-import { resolveSessionUser, withSession } from "@/server/api-helpers";
+import { resolveSessionUser, withSession, guardMutation } from "@/server/api-helpers";
 
 const adapters = {
   gemini: () => new GeminiAdapter(),
@@ -17,6 +17,8 @@ const adapters = {
 type ValidatableProvider = keyof typeof adapters;
 
 export async function POST(req: Request): Promise<Response> {
+  const blocked = guardMutation(req);
+  if (blocked !== null) return blocked;
   const s = await resolveSessionUser(req);
 
   let body: { provider?: string; apiKey?: string };

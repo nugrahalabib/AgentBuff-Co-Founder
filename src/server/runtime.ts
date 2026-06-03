@@ -13,18 +13,29 @@ import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchRe
 import { ProjectService } from "@/server/services/project-service";
 import { ResearchService } from "@/server/services/research-service";
 import { PlannerService } from "@/server/services/planner-service";
+import { CredentialService } from "@/server/services/credential-service";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
+import {
+  InMemoryMcpAuditStore,
+  InMemoryMcpClientStore,
+  type McpAuditStore,
+  type McpClientStore,
+} from "@/server/mcp/client-store";
+import { McpGatewayService } from "@/server/mcp/gateway-service";
 import { createPrismaPersistence } from "@/server/db/prisma-repositories";
+import { byokMasterKeyBase64 } from "@/server/env";
 
 export interface AppRuntime {
   master: LocalMasterKey;
   credentials: UpsertableCredentialStore;
   registry: DefaultProviderRegistry;
+  credentialService: CredentialService;
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
   mcp: McpToolRegistry;
+  mcpGateway: McpGatewayService;
   repos: {
     projects: Repository<Project>;
     reports: Repository<ResearchReport>;
@@ -38,9 +49,8 @@ export interface AppRuntime {
 }
 
 function createRuntime(): AppRuntime {
-  const master = process.env.BYOK_MASTER_KEY_BASE64
-    ? LocalMasterKey.fromBase64(process.env.BYOK_MASTER_KEY_BASE64)
-    : LocalMasterKey.generate();
+  const masterB64 = byokMasterKeyBase64(); // throws in prod if unset
+  const master = masterB64 !== null ? LocalMasterKey.fromBase64(masterB64) : LocalMasterKey.generate();
 
   const usePostgres = typeof process.env.DATABASE_URL === "string" && process.env.DATABASE_URL.length > 0;
 
@@ -48,6 +58,8 @@ function createRuntime(): AppRuntime {
   let projectsRepo: Repository<Project>;
   let reportsRepo: Repository<ResearchReport>;
   let plansRepo: Repository<BusinessPlan>;
+  let mcpClients: McpClientStore;
+  let mcpAudit: McpAuditStore;
   let ensureUser: (userId: string) => Promise<void>;
   let saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   let getProfile: (userId: string) => Promise<OnboardingProfile | null>;
@@ -58,6 +70,8 @@ function createRuntime(): AppRuntime {
     projectsRepo = p.projects;
     reportsRepo = p.reports;
     plansRepo = p.plans;
+    mcpClients = p.mcpClients;
+    mcpAudit = p.mcpAudit;
     ensureUser = p.ensureUser;
     saveProfile = p.saveProfile;
     getProfile = p.getProfile;
@@ -66,6 +80,8 @@ function createRuntime(): AppRuntime {
     projectsRepo = new InMemoryRepository<Project>();
     reportsRepo = new InMemoryRepository<ResearchReport>();
     plansRepo = new InMemoryRepository<BusinessPlan>();
+    mcpClients = new InMemoryMcpClientStore();
+    mcpAudit = new InMemoryMcpAuditStore();
     ensureUser = async () => {};
     const profiles = new Map<string, OnboardingProfile>();
     saveProfile = async (userId, input) => {
@@ -84,14 +100,22 @@ function createRuntime(): AppRuntime {
   const idGen = (): string => randomUUID();
   const now = (): string => new Date().toISOString();
 
+  // Hoist services so the MCP gateway shares the SAME instances as the web adapters (headless == UI).
+  const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, idGen, now });
+  const research = new ResearchService({ reports: reportsRepo, registry, idGen, now });
+  const planner = new PlannerService({ plans: plansRepo, registry, idGen, now });
+  const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner }, idGen, now, mcpAudit);
+
   return {
     master,
     credentials,
     registry,
-    projects: new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, idGen, now }),
-    research: new ResearchService({ reports: reportsRepo, registry, idGen, now }),
-    planner: new PlannerService({ plans: plansRepo, registry, idGen, now }),
+    credentialService: new CredentialService(credentials, master),
+    projects,
+    research,
+    planner,
     mcp: buildToolRegistry(),
+    mcpGateway,
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo },
     ensureUser,
     saveProfile,

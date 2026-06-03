@@ -21,6 +21,8 @@ import type {
   TaskClass,
 } from "./types";
 import { resolveModel } from "./model-routing";
+import { withRetry } from "./retry";
+import { parseAndValidate } from "./schema-validate";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -141,30 +143,33 @@ export class GeminiAdapter implements LLMProvider {
     model: string,
     body: Record<string, unknown>,
   ): Promise<GenerateContentResponse> {
-    let res: Response;
-    try {
-      res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": cred.secret },
-        body: JSON.stringify(body),
-      });
-    } catch {
-      // Network failure — never include the key in the message.
-      throw new GeminiApiError("Gagal menghubungi Gemini API.", 0, true);
-    }
-    if (!res.ok) {
-      const c = classifyValidationStatus(res.status);
-      const detail = c.kind === "ok" ? "" : c.detail;
-      throw new GeminiApiError(detail || `Gemini API error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
-    }
-    const data = (await res.json()) as GenerateContentResponse;
-    if (data.promptFeedback?.blockReason !== undefined) {
-      throw new GeminiApiError(`Permintaan diblokir Gemini (${data.promptFeedback.blockReason}).`, 200, false);
-    }
-    if (data.candidates === undefined || data.candidates.length === 0) {
-      throw new GeminiApiError("Gemini tidak mengembalikan kandidat jawaban.", 200, false);
-    }
-    return data;
+    // Retry transient (429/5xx/network) errors with exponential backoff. PRD §12.5.
+    return withRetry(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": cred.secret },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        // Network failure — never include the key in the message.
+        throw new GeminiApiError("Gagal menghubungi Gemini API.", 0, true);
+      }
+      if (!res.ok) {
+        const c = classifyValidationStatus(res.status);
+        const detail = c.kind === "ok" ? "" : c.detail;
+        throw new GeminiApiError(detail || `Gemini API error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
+      }
+      const data = (await res.json()) as GenerateContentResponse;
+      if (data.promptFeedback?.blockReason !== undefined) {
+        throw new GeminiApiError(`Permintaan diblokir Gemini (${data.promptFeedback.blockReason}).`, 200, false);
+      }
+      if (data.candidates === undefined || data.candidates.length === 0) {
+        throw new GeminiApiError("Gemini tidak mengembalikan kandidat jawaban.", 200, false);
+      }
+      return data;
+    });
   }
 
   async validateCredential(
@@ -217,21 +222,22 @@ export class GeminiAdapter implements LLMProvider {
     if (opts.reasoning !== undefined) {
       generationConfig["thinkingConfig"] = { thinkingLevel: mapThinkingLevel(opts.reasoning) };
     }
-    const body: Record<string, unknown> = {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig,
+    const makeBody = (text: string): Record<string, unknown> => {
+      const body: Record<string, unknown> = { contents: [{ role: "user", parts: [{ text }] }], generationConfig };
+      if (opts.systemPrompt !== undefined) body["systemInstruction"] = { parts: [{ text: opts.systemPrompt }] };
+      return body;
     };
-    if (opts.systemPrompt !== undefined) {
-      body["systemInstruction"] = { parts: [{ text: opts.systemPrompt }] };
-    }
 
-    const data = await this.generateContent(cred, model, body);
-    const text = extractText(data);
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new GeminiApiError("Output Gemini bukan JSON yang valid untuk schema yang diminta.", 200, false);
-    }
+    // 1) generate, 2) validate against JSON Schema, 3) one repair attempt, else fail. PRD §12.5.
+    const first = extractText(await this.generateContent(cred, model, makeBody(prompt)));
+    const r1 = parseAndValidate<T>(first, opts.jsonSchema);
+    if (r1.ok) return r1.value;
+
+    const repairPrompt = `${prompt}\n\nCATATAN: Output JSON sebelumnya TIDAK valid terhadap schema (${r1.errors}). Kembalikan HANYA JSON yang valid persis sesuai schema, tanpa teks lain.`;
+    const second = extractText(await this.generateContent(cred, model, makeBody(repairPrompt)));
+    const r2 = parseAndValidate<T>(second, opts.jsonSchema);
+    if (r2.ok) return r2.value;
+    throw new GeminiApiError(`Output Gemini tidak valid terhadap schema setelah perbaikan (${r2.errors}).`, 200, false);
   }
 
   async groundedSearch(

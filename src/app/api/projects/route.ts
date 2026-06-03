@@ -2,9 +2,11 @@
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
-import { resolveSessionUser, currentUserId, withSession } from "@/server/api-helpers";
+import { resolveSessionUser, currentUserId, withSession, guardMutation } from "@/server/api-helpers";
 
 export async function POST(req: Request): Promise<Response> {
+  const blocked = guardMutation(req);
+  if (blocked !== null) return blocked;
   const s = await resolveSessionUser(req);
   let body: { idea?: string; sector?: string; geography?: string };
   try {

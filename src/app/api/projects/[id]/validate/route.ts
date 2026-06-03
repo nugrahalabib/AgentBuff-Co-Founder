@@ -3,10 +3,12 @@
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
-import { currentUserId } from "@/server/api-helpers";
+import { currentUserId, guardMutation } from "@/server/api-helpers";
 import { ProviderError } from "@/lib/ai/registry";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  const blocked = guardMutation(req);
+  if (blocked !== null) return blocked;
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Sesi tidak ditemukan." }, { status: 401 });
 
@@ -28,7 +30,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ report });
   } catch (e) {
     if (e instanceof ProviderError) {
-      return NextResponse.json({ error: "Tautkan API key dulu di Onboarding.", code: e.code }, { status: 400 });
+      return NextResponse.json({ error: "Tautkan API key dulu di Pengaturan.", code: e.code }, { status: 400 });
     }
     const message = e instanceof Error ? e.message : "Gagal menjalankan validasi.";
     return NextResponse.json({ error: message }, { status: 502 });

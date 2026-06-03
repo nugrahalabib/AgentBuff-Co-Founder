@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "@/ui/app-header";
+import { CredentialGate } from "@/ui/credential-gate";
 import { app } from "@/server/runtime";
 import { getServerUserId } from "@/server/api-helpers";
 import { ProjectClient } from "./project-client";
@@ -16,6 +17,7 @@ export default async function ProjectPage(props: { params: Promise<{ id: string 
     <div className="min-h-dvh">
       <AppHeader />
       <main className="mx-auto max-w-4xl px-5 py-8">
+        <CredentialGate feature="validasi ide & narasi business plan" />
         <ProjectClient
           projectId={state.project.id}
           title={state.project.title}

@@ -2,7 +2,7 @@
 // Core domain entities. PRD §11 (data model), §9.2.7 / §9.3.10. Timestamps are ISO strings
 // (services inject the clock so logic stays testable).
 
-import type { FinancialInputs, FinancialsResult } from "../engine/financial/index";
+import type { FinancialInputs, FinancialsResult, ScenarioSummarySet } from "../engine/financial/index";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "../engine/research/index";
 import type { Citation } from "../../lib/ai/types";
 
@@ -67,6 +67,8 @@ export interface BusinessPlan {
   inputs: FinancialInputs;
   /** Numbers from the deterministic engine — never authored by the LLM. PRD §9.3.2. */
   financials: FinancialsResult;
+  /** Pessimistic/realistic/optimistic KPI summaries (deterministic). PRD §9.3.9. */
+  scenarios?: ScenarioSummarySet;
   /** Narrative sections (LLM-written, numbers injected). */
   narrative?: Record<string, string>;
   stale: boolean;

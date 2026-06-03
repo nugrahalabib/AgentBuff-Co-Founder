@@ -76,10 +76,24 @@ export class ProjectService {
   }
 
   async attachResearch(projectId: string, reportId: string): Promise<Project> {
-    return this.update(projectId, (p) => {
+    const project = await this.update(projectId, (p) => {
       p.refs.researchReportId = reportId;
-      p.status = "planning";
+      // Don't regress a project that already has a plan/brand/docs back to "planning".
+      if (p.status === "draft" || p.status === "researching") p.status = "planning";
     });
+    // §9.3.7 staleness propagation: fresh upstream research makes any existing plan downstream-stale.
+    await this.markPlanStale(project);
+    return project;
+  }
+
+  /** Mark the project's business plan as needing a refresh (no silent overwrite). PRD §9.3.7. */
+  async markPlanStale(project: Project): Promise<void> {
+    if (project.refs.businessPlanId === undefined || this.deps.plans === undefined) return;
+    const plan = await this.deps.plans.get(project.refs.businessPlanId);
+    if (plan !== null && !plan.stale) {
+      plan.stale = true;
+      await this.deps.plans.save(plan);
+    }
   }
 
   async attachPlan(projectId: string, planId: string): Promise<Project> {

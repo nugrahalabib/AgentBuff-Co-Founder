@@ -30,4 +30,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
+  events: {
+    // Persist the real Google identity (email, name, avatar) to Postgres on every sign-in.
+    // Best-effort + dynamic import: never block login, never pull Prisma into the edge bundle. PRD §9.1, §11.2.
+    async signIn({ user, profile }) {
+      if (profile === undefined || typeof profile.sub !== "string") return;
+      const sub = profile.sub;
+      if (typeof process.env.DATABASE_URL !== "string" || process.env.DATABASE_URL.length === 0) return;
+      try {
+        const { persistGoogleUser } = await import("./server/db/auth-user");
+        await persistGoogleUser(`google:${sub}`, {
+          sub,
+          email: user.email ?? (typeof profile.email === "string" ? profile.email : null),
+          name: user.name ?? (typeof profile.name === "string" ? profile.name : null),
+          picture: user.image ?? (typeof profile.picture === "string" ? profile.picture : null),
+        });
+      } catch {
+        // swallow — sign-in must succeed even if persistence fails.
+      }
+    },
+  },
 });

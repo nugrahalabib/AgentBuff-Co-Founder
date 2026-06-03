@@ -2,7 +2,11 @@
 // The UI calls this; it returns the exact same FinancialsResult the MCP tool returns. PRD §9.3, §9.6.
 
 import { NextResponse } from "next/server";
-import { calculateFinancials, type CalculateFinancialsInput } from "@/server/mcp/tools/calculate-financials";
+import {
+  calculateFinancials,
+  calculateScenarios,
+  type CalculateFinancialsInput,
+} from "@/server/mcp/tools/calculate-financials";
 import { FinancialInputError } from "@/server/engine/financial/index";
 
 export async function POST(req: Request): Promise<Response> {
@@ -14,7 +18,8 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    return NextResponse.json(calculateFinancials(body));
+    // Base case + deterministic scenarios in one response (same engine, no LLM). PRD §9.3.9.
+    return NextResponse.json({ ...calculateFinancials(body), scenarios: calculateScenarios(body) });
   } catch (e) {
     if (e instanceof FinancialInputError) {
       return NextResponse.json({ error: e.message }, { status: 422 });
