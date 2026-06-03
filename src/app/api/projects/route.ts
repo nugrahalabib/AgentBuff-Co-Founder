@@ -2,10 +2,10 @@
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
-import { sessionUser, currentUserId, withSession } from "@/server/api-helpers";
+import { resolveSessionUser, currentUserId, withSession } from "@/server/api-helpers";
 
 export async function POST(req: Request): Promise<Response> {
-  const s = sessionUser(req);
+  const s = await resolveSessionUser(req);
   let body: { idea?: string; sector?: string; geography?: string };
   try {
     body = (await req.json()) as { idea?: string; sector?: string; geography?: string };
@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const userId = currentUserId(req);
+  const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ projects: [] });
   return NextResponse.json({ projects: await app.projects.listForUser(userId) });
 }

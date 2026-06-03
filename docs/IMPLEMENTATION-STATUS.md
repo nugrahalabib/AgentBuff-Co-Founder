@@ -37,7 +37,8 @@
 | Provider methods: Deep Research (Interactions/o3), image gen (Nano Banana/gpt-image), doc/vision | §12.8, §12.10–11, §12.15 | 🟡 | stubs throw 501 with the exact doc refs; need a live key to verify |
 | Doc render → PDF (HTML/CSS + Paged.js → headless Chromium worker) | §9.5.2 | ⛔ | slot-assembly logic testable; Chromium render needs the worker |
 | UI deepening: research→real grounded view, planner wizard polish, brand/docs wired to services | §14 | 🟡 | all 6 modules have a UI now; Validasi (deterministic scoring) + Calculator are fully functional; Brand/Docs are scaffolds pending their services |
-| Google OIDC login (Auth.js) + SSO/Webhook federation | §9.1 | ⛔ | needs Google client id/secret — see [AUTH-SETUP.md](AUTH-SETUP.md) |
+| **Google login (Auth.js v5)** — wired + verified (providers/csrf OK); guest-session fallback | §9.1 | ✅ | button on /onboarding; provide GOOGLE_CLIENT_ID/SECRET in .env.local |
+| SSO/Webhook partner federation | §9.1.3.1 | ⛔ | per-partner signed JWT handoff |
 | Redis (BullMQ async jobs) + S3 object storage | §10.3 | ⛔ | for long jobs & artifact storage |
 
 ## What "needs infra/credentials" means

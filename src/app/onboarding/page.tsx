@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/ui/button";
+import { GoogleSignInButton } from "@/ui/google-auth";
 
 type Provider = "gemini" | "openai" | "openai_codex";
 type Status = "idle" | "validating" | "valid" | "error";
@@ -88,6 +89,14 @@ export default function OnboardingPage() {
         AgentBuff Co-Founder gratis — biaya AI memakai kuota key milikmu (BYOK). Key-mu dienkripsi dan tak pernah kami
         lihat dalam bentuk asli.
       </p>
+
+      {/* Google login (optional) */}
+      <div className="mt-6">
+        <GoogleSignInButton />
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" /> atau tautkan API key langsung <span className="h-px flex-1 bg-border" />
+        </div>
+      </div>
 
       {/* Provider selector */}
       <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">

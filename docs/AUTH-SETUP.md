@@ -13,8 +13,10 @@ Three options on `/onboarding` (key/token validated live, then stored **envelope
 
 > Note (PRD §12.16 / R19): full *interactive* ChatGPT OAuth (browser redirect) is intended for the **desktop/CLI** mode. In the hosted web app, Codex is supported as a **token paste** (`oauth_token`), validated against the OpenAI Responses API. If your token isn't API-compatible, you'll get a clear error — use a Gemini/OpenAI key instead.
 
-## 2) Google login (NextAuth) — how to get the credentials
-The app currently uses a signed-cookie **guest session**. To enable real Google login:
+## 2) Google login (Auth.js / NextAuth v5) — WIRED ✅
+Google sign-in is **implemented** (Auth.js v5, JWT session, user id `google:<sub>`; falls back to the
+signed-cookie guest session). With the 3 env values set in `.env.local`, the **"Login dengan Google"**
+button on `/onboarding` works. How to get the credentials:
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → create/select a **Project**.
 2. **APIs & Services → OAuth consent screen** → **External** → fill app name "AgentBuff Co-Founder", support email → save (Testing mode is fine to start).

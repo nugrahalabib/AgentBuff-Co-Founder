@@ -1,13 +1,12 @@
-import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "@/ui/app-header";
 import { app } from "@/server/runtime";
-import { SESSION_COOKIE, verifySession } from "@/server/session";
+import { getServerUserId } from "@/server/api-helpers";
 import { ProjectClient } from "./project-client";
 
 export default async function ProjectPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
-  const userId = verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  const userId = await getServerUserId();
   if (userId === null) redirect("/onboarding");
 
   const state = await app.projects.getState(id);

@@ -7,7 +7,7 @@ import { currentUserId } from "@/server/api-helpers";
 import { ProviderError } from "@/lib/ai/registry";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
-  const userId = currentUserId(req);
+  const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Sesi tidak ditemukan." }, { status: 401 });
 
   const { id } = await ctx.params;

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { AppHeader } from "@/ui/app-header";
 import { NewProjectForm } from "@/ui/new-project-form";
 import { app } from "@/server/runtime";
-import { SESSION_COOKIE, verifySession } from "@/server/session";
+import { getServerUserId } from "@/server/api-helpers";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -25,7 +24,7 @@ const MODULES = [
 ];
 
 export default async function DashboardPage() {
-  const userId = verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  const userId = await getServerUserId();
   const projects = userId !== null ? await app.projects.listForUser(userId) : [];
 
   return (
