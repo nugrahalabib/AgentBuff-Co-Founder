@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/ui/button";
 import { CashFlowChart } from "@/ui/cash-flow-chart";
-import type { BusinessDocument, BusinessPlan, DocumentType, ResearchReport } from "@/server/domain/types";
+import type { BrandKit, BusinessDocument, BusinessPlan, DocumentType, ResearchReport } from "@/server/domain/types";
 import type { FinancialInputs, ScenarioKpis, ScenarioSummarySet } from "@/server/engine/financial/index";
 
 const idr = (n: number) =>
@@ -62,6 +62,7 @@ export function ProjectClient({
   ideaText,
   initialResearch,
   initialPlan,
+  initialBrandKit,
   initialDocuments,
 }: {
   projectId: string;
@@ -69,13 +70,15 @@ export function ProjectClient({
   ideaText: string;
   initialResearch: ResearchReport | null;
   initialPlan: BusinessPlan | null;
+  initialBrandKit: BrandKit | null;
   initialDocuments: BusinessDocument[];
 }) {
   const [research, setResearch] = useState<ResearchReport | null>(initialResearch);
   const [plan, setPlan] = useState<BusinessPlan | null>(initialPlan);
+  const [brandKit, setBrandKit] = useState<BrandKit | null>(initialBrandKit);
   const [documents, setDocuments] = useState<BusinessDocument[]>(initialDocuments);
   const [form, setForm] = useState<PlanForm>(PLAN_DEFAULTS);
-  const [busy, setBusy] = useState<"validate" | "plan" | "proposal" | "pitch_deck" | null>(null);
+  const [busy, setBusy] = useState<"validate" | "plan" | "brand" | "proposal" | "pitch_deck" | null>(null);
   const [error, setError] = useState("");
   const [stages, setStages] = useState<Record<string, "start" | "done">>({});
 
@@ -151,6 +154,25 @@ export function ProjectClient({
       const data = (await res.json()) as { plan?: BusinessPlan; error?: string };
       if (!res.ok || data.plan === undefined) setError(data.error ?? "Gagal menyusun plan.");
       else setPlan(data.plan);
+    } catch {
+      setError("Tidak bisa menghubungi server.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function generateBrand() {
+    setBusy("brand");
+    setError("");
+    try {
+      const res = await fetch(`/api/projects/${projectId}/brand`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json()) as { brandKit?: BrandKit; error?: string };
+      if (!res.ok || data.brandKit === undefined) setError(data.error ?? "Gagal menyusun brand.");
+      else setBrandKit(data.brandKit);
     } catch {
       setError("Tidak bisa menghubungi server.");
     } finally {
@@ -276,9 +298,27 @@ export function ProjectClient({
         )}
       </section>
 
+      {/* Brand Forge */}
+      <section className="rounded-card border border-border bg-surface p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">3 · Brand Forge</h2>
+          <Button onClick={() => void generateBrand()} disabled={busy !== null} size="md" variant={brandKit ? "secondary" : "primary"}>
+            {busy === "brand" ? "Menempa…" : brandKit ? "Buat ulang" : "Buat Identitas Brand"}
+          </Button>
+        </div>
+        {brandKit === null ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Strategi, naming, tone of voice, dan palet warna (dihasilkan deterministik dari warna utama). Konsep visual
+            (moodboard/logo) dibuat bila API key-mu mendukung generasi gambar.
+          </p>
+        ) : (
+          <BrandKitView kit={brandKit} />
+        )}
+      </section>
+
       {/* Deck & Docs */}
       <section className="rounded-card border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold">3 · Deck &amp; Docs</h2>
+        <h2 className="text-sm font-semibold">4 · Deck &amp; Docs</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Proposal A4 &amp; pitch deck 16:9 — teks disusun AI, semua angka diikat dari engine. Buka lalu &ldquo;Cetak /
           Simpan PDF&rdquo;.
@@ -315,6 +355,86 @@ export function ProjectClient({
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function BrandKitView({ kit }: { kit: BrandKit }) {
+  const pal = kit.visualTokens.palette;
+  const swatches: [string, string][] = [
+    ["Primary", pal.primary],
+    ["Secondary", pal.secondary],
+    ["Accent", pal.accent],
+    ["Dark", pal.neutralDark],
+    ["Light", pal.neutralLight],
+  ];
+  return (
+    <div className="mt-4 space-y-5">
+      <div>
+        <span className="font-display text-2xl">{kit.selectedName}</span>
+        <p className="mt-1 text-sm text-muted-foreground">{kit.strategy.essence}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{kit.strategy.positioning}</p>
+      </div>
+
+      {/* Palette */}
+      <div>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Palet warna (deterministik)</p>
+        <div className="flex flex-wrap gap-2">
+          {swatches.map(([label, hex]) => (
+            <div key={label} className="text-center">
+              <div className="h-12 w-16 rounded-lg border border-border" style={{ background: hex }} />
+              <p className="mt-1 text-[10px] text-muted-foreground">{label}</p>
+              <p className="text-[10px] tabular-nums text-muted-foreground">{hex}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Tipografi: <strong>{kit.visualTokens.typography.heading}</strong> / {kit.visualTokens.typography.body}
+        </p>
+      </div>
+
+      {/* Names + taglines */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Opsi nama</p>
+          <ul className="space-y-1 text-sm">
+            {kit.naming.slice(0, 5).map((n, i) => (
+              <li key={i}>
+                <span className="font-medium">{n.name}</span>
+                <span className="text-xs text-muted-foreground"> — {n.rationale}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Tagline</p>
+          <ul className="space-y-1 text-sm">
+            {kit.voice.taglines.slice(0, 5).map((t, i) => (
+              <li key={i}>&ldquo;{t}&rdquo;</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Visual concepts */}
+      {kit.assets.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Konsep visual</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {kit.assets.map((a, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <figure key={i} className="overflow-hidden rounded-xl border border-border">
+                <img src={a.imageRef} alt={a.type} className="aspect-square w-full object-cover" />
+                <figcaption className="bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">{a.type}</figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        Konsep awal kreatif — bukan aset final/cek merek hukum. Verifikasi nama via DJKI sebelum produksi.
+      </p>
     </div>
   );
 }

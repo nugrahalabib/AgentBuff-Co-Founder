@@ -4,6 +4,7 @@
 
 import type { FinancialInputs, FinancialsResult, ScenarioSummarySet } from "../engine/financial/index";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "../engine/research/index";
+import type { BrandPalette, PaletteScheme } from "../engine/brand/index";
 import type { Citation } from "../../lib/ai/types";
 
 export type ProjectStatus =
@@ -184,11 +185,67 @@ export interface BusinessDocument {
   generatedAt: string;
 }
 
+// --- Brand Forge Studio (PRD §9.4). Text/direction from the LLM; the colour palette (design tokens)
+//     is generated deterministically in code from a proposed primary colour. ---
+export interface BrandStrategy {
+  essence: string;
+  positioning: string;
+  personality: string[];
+  pillars: string[];
+}
+export interface NamingOption {
+  name: string;
+  rationale: string;
+  availabilityHint?: string;
+}
+export interface BrandVoice {
+  attributes: string[];
+  taglines: string[];
+  samples: string[];
+  dos: string[];
+  donts: string[];
+}
+export interface BrandTypography {
+  heading: string;
+  body: string;
+}
+export type BrandAssetType = "moodboard" | "logo" | "interior" | "packaging";
+export interface BrandAsset {
+  type: BrandAssetType;
+  /** Image reference (data URL now; object-storage URL after Wave 2). */
+  imageRef: string;
+  promptUsed: string;
+  selected: boolean;
+}
+export interface BrandVisualTokens {
+  palette: BrandPalette;
+  scheme: PaletteScheme;
+  typography: BrandTypography;
+  logoDirection: string;
+  imageryStyle: string;
+}
+
+export interface BrandKit {
+  id: string;
+  projectId: string;
+  status: "draft" | "complete";
+  version: number;
+  strategy: BrandStrategy;
+  selectedName: string;
+  naming: NamingOption[];
+  voice: BrandVoice;
+  visualTokens: BrandVisualTokens;
+  assets: BrandAsset[];
+  stale: boolean;
+  generatedAt: string;
+}
+
 /** Read-only composite for MCP `get_project` and downstream context binding. PRD §11.2. */
 export interface ProjectState {
   project: Project;
   research?: ResearchReport;
   plan?: BusinessPlan;
+  brandKit?: BrandKit;
   documents?: BusinessDocument[];
 }
 

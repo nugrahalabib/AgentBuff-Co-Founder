@@ -134,6 +134,25 @@ describe("GeminiAdapter.generateStructured", () => {
   });
 });
 
+describe("GeminiAdapter.generateImage", () => {
+  it("requests an image and returns the inline bytes as a data URL", async () => {
+    const fn = stubFetch(
+      fakeResponse(200, {
+        candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "QUJD" } }] } }],
+      }),
+    );
+    const out = await new GeminiAdapter().generateImage(cred, "logo kopi minimalis");
+    expect(out.imageRef).toBe("data:image/png;base64,QUJD");
+    expect((fn.mock.calls[0]![0] as string)).toContain(`/models/${resolveModel("image_gen", "gemini")}:generateContent`);
+    expect((requestBody(fn)["generationConfig"] as Record<string, unknown>)["responseModalities"]).toEqual(["IMAGE"]);
+  });
+
+  it("throws when no image part is returned", async () => {
+    stubFetch(fakeResponse(200, { candidates: [{ content: { parts: [{ text: "no image" }] } }] }));
+    await expect(new GeminiAdapter().generateImage(cred, "x")).rejects.toThrow(/tidak mengembalikan gambar/i);
+  });
+});
+
 describe("GeminiAdapter.groundedSearch", () => {
   it("enables google_search and normalizes citations + sources", async () => {
     const fn = stubFetch(

@@ -3,12 +3,13 @@
 // service is deterministic in tests. PRD §8 (guided journey), §11.2.
 
 import type { Repository } from "../domain/repositories";
-import type { Project, ProjectState, ResearchReport, BusinessPlan, BusinessDocument } from "../domain/types";
+import type { Project, ProjectState, ResearchReport, BusinessPlan, BusinessDocument, BrandKit } from "../domain/types";
 
 export interface ProjectServiceDeps {
   projects: Repository<Project>;
   research?: Repository<ResearchReport>;
   plans?: Repository<BusinessPlan>;
+  brandKits?: Repository<BrandKit>;
   documents?: Repository<BusinessDocument>;
   idGen: () => string;
   now: () => string;
@@ -73,6 +74,9 @@ export class ProjectService {
     if (project.refs.businessPlanId !== undefined && this.deps.plans !== undefined) {
       state.plan = (await this.deps.plans.get(project.refs.businessPlanId)) ?? undefined;
     }
+    if (project.refs.brandKitId !== undefined && this.deps.brandKits !== undefined) {
+      state.brandKit = (await this.deps.brandKits.get(project.refs.brandKitId)) ?? undefined;
+    }
     if (project.refs.documentIds.length > 0 && this.deps.documents !== undefined) {
       const docs = await Promise.all(project.refs.documentIds.map((d) => this.deps.documents!.get(d)));
       const found = docs.filter((d): d is NonNullable<typeof d> => d !== null);
@@ -106,6 +110,15 @@ export class ProjectService {
     return this.update(projectId, (p) => {
       p.refs.businessPlanId = planId;
       if (p.status === "draft" || p.status === "researching" || p.status === "planning") p.status = "branding";
+    });
+  }
+
+  async attachBrandKit(projectId: string, brandKitId: string): Promise<Project> {
+    return this.update(projectId, (p) => {
+      p.refs.brandKitId = brandKitId;
+      if (p.status === "draft" || p.status === "researching" || p.status === "planning" || p.status === "branding") {
+        p.status = "documenting";
+      }
     });
   }
 

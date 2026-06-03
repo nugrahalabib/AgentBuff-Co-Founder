@@ -126,6 +126,21 @@ describe("OpenAIAdapter.generateStructured", () => {
   });
 });
 
+describe("OpenAIAdapter.generateImage", () => {
+  it("calls the Image API and returns a base64 data URL", async () => {
+    const fn = stubFetch(fakeResponse(200, { data: [{ b64_json: "QUJD" }] }));
+    const out = await new OpenAIAdapter().generateImage(cred, "logo kopi minimalis");
+    expect(out.imageRef).toBe("data:image/png;base64,QUJD");
+    expect(fn.mock.calls[0]![0]).toBe("https://api.openai.com/v1/images/generations");
+    expect(requestBody(fn)["model"]).toBe(resolveModel("image_gen", "openai"));
+  });
+
+  it("throws when the API returns no image", async () => {
+    stubFetch(fakeResponse(200, { data: [] }));
+    await expect(new OpenAIAdapter().generateImage(cred, "x")).rejects.toThrow(/tidak mengembalikan gambar/i);
+  });
+});
+
 describe("OpenAIAdapter.groundedSearch", () => {
   it("enables web_search and normalizes citations from annotations", async () => {
     const fn = stubFetch(

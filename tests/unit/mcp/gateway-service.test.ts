@@ -3,7 +3,7 @@ import { InMemoryMcpAuditStore, InMemoryMcpClientStore } from "../../../src/serv
 import { McpGatewayService, type McpServices } from "../../../src/server/mcp/gateway-service";
 
 // The gateway only touches `userId` + the services object identity for context(); stub the services.
-const services = { projects: {}, research: {}, planner: {}, docs: {} } as unknown as McpServices;
+const services = { projects: {}, research: {}, planner: {}, brand: {}, docs: {} } as unknown as McpServices;
 
 function makeGateway() {
   const clients = new InMemoryMcpClientStore();

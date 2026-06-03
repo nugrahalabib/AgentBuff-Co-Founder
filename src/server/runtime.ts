@@ -9,10 +9,11 @@ import { LocalMasterKey } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
 import { InMemoryRepository, type Repository } from "@/server/domain/repositories";
-import type { BusinessDocument, BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
+import type { BrandKit, BusinessDocument, BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
 import { ProjectService } from "@/server/services/project-service";
 import { ResearchService } from "@/server/services/research-service";
 import { PlannerService } from "@/server/services/planner-service";
+import { BrandService } from "@/server/services/brand-service";
 import { DocsService } from "@/server/services/docs-service";
 import { CredentialService } from "@/server/services/credential-service";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
@@ -35,6 +36,7 @@ export interface AppRuntime {
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
+  brand: BrandService;
   docs: DocsService;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
@@ -42,6 +44,7 @@ export interface AppRuntime {
     projects: Repository<Project>;
     reports: Repository<ResearchReport>;
     plans: Repository<BusinessPlan>;
+    brandKits: Repository<BrandKit>;
     documents: Repository<BusinessDocument>;
   };
   /** Ensure the (guest) User row exists before creating FK-constrained rows. No-op in memory mode. */
@@ -61,6 +64,7 @@ function createRuntime(): AppRuntime {
   let projectsRepo: Repository<Project>;
   let reportsRepo: Repository<ResearchReport>;
   let plansRepo: Repository<BusinessPlan>;
+  let brandKitsRepo: Repository<BrandKit>;
   let documentsRepo: Repository<BusinessDocument>;
   let mcpClients: McpClientStore;
   let mcpAudit: McpAuditStore;
@@ -74,6 +78,7 @@ function createRuntime(): AppRuntime {
     projectsRepo = p.projects;
     reportsRepo = p.reports;
     plansRepo = p.plans;
+    brandKitsRepo = p.brandKits;
     documentsRepo = p.documents;
     mcpClients = p.mcpClients;
     mcpAudit = p.mcpAudit;
@@ -85,6 +90,7 @@ function createRuntime(): AppRuntime {
     projectsRepo = new InMemoryRepository<Project>();
     reportsRepo = new InMemoryRepository<ResearchReport>();
     plansRepo = new InMemoryRepository<BusinessPlan>();
+    brandKitsRepo = new InMemoryRepository<BrandKit>();
     documentsRepo = new InMemoryRepository<BusinessDocument>();
     mcpClients = new InMemoryMcpClientStore();
     mcpAudit = new InMemoryMcpAuditStore();
@@ -107,11 +113,12 @@ function createRuntime(): AppRuntime {
   const now = (): string => new Date().toISOString();
 
   // Hoist services so the MCP gateway shares the SAME instances as the web adapters (headless == UI).
-  const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, documents: documentsRepo, idGen, now });
+  const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo, idGen, now });
   const research = new ResearchService({ reports: reportsRepo, registry, idGen, now });
   const planner = new PlannerService({ plans: plansRepo, registry, idGen, now });
+  const brand = new BrandService({ brandKits: brandKitsRepo, registry, idGen, now });
   const docs = new DocsService({ documents: documentsRepo, registry, idGen, now });
-  const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner, docs }, idGen, now, mcpAudit);
+  const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner, brand, docs }, idGen, now, mcpAudit);
 
   return {
     master,
@@ -121,10 +128,11 @@ function createRuntime(): AppRuntime {
     projects,
     research,
     planner,
+    brand,
     docs,
     mcp: buildToolRegistry(),
     mcpGateway,
-    repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, documents: documentsRepo },
+    repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo },
     ensureUser,
     saveProfile,
     getProfile,

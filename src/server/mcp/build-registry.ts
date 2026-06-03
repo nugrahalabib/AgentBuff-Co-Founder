@@ -104,6 +104,29 @@ export function buildToolRegistry(): McpToolRegistry {
   });
 
   registry.register({
+    name: "agentbuff.generate_brand_kit",
+    description: "Buat identitas brand: strategi, naming, voice, palet warna deterministik, dan konsep visual. Simpan ke project.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: { project_id: { type: "string" }, with_images: { type: "boolean" } },
+    },
+    handler: async (input: { project_id: string; with_images?: boolean }, ctx) => {
+      const project = await requireOwnedProject(ctx, input.project_id);
+      const state = await ctx.projects.getState(project.id);
+      if (state === null) throw new McpError("NOT_FOUND", "State project tidak ditemukan.");
+      const kit = await ctx.brand.generate(ctx.userId, { projectState: state, withImages: input.with_images });
+      await ctx.projects.attachBrandKit(project.id, kit.id);
+      return {
+        brand_kit_id: kit.id,
+        selected_name: kit.selectedName,
+        palette: kit.visualTokens.palette,
+        asset_count: kit.assets.length,
+      };
+    },
+  });
+
+  registry.register({
     name: "agentbuff.generate_document",
     description: "Susun proposal (A4) atau pitch deck (16:9): slot teks dari LLM, angka diikat dari engine. Simpan ke project.",
     inputSchema: {

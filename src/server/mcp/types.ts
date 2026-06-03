@@ -5,6 +5,7 @@
 import type { ProjectService } from "../services/project-service";
 import type { ResearchService } from "../services/research-service";
 import type { PlannerService } from "../services/planner-service";
+import type { BrandService } from "../services/brand-service";
 import type { DocsService } from "../services/docs-service";
 
 /** Per-call context, bound to the authenticated user (OAuth token → user). PRD §9.6.5. */
@@ -13,6 +14,7 @@ export interface McpContext {
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
+  brand: BrandService;
   docs: DocsService;
 }
 

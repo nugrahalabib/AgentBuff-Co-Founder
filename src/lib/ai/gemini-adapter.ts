@@ -39,8 +39,13 @@ export class GeminiApiError extends Error {
 }
 
 // --- Minimal response shapes (only the fields we read). ---
+interface GeminiInlineData {
+  mimeType?: string;
+  data?: string;
+}
 interface GeminiPart {
   text?: string;
+  inlineData?: GeminiInlineData;
 }
 interface GroundingChunk {
   web?: { uri?: string; title?: string };
@@ -265,9 +270,21 @@ export class GeminiAdapter implements LLMProvider {
   async pollDeepResearch(_cred: Credential, _handle: DeepResearchHandle): Promise<DeepResearchHandle> {
     throw new GeminiApiError("Deep Research polling belum diimplementasikan (Fase 1).", 501, false);
   }
-  async generateImage(_cred: Credential, _prompt: string, _opts?: ImageOpts): Promise<{ imageRef: string }> {
-    // Nano Banana via BYOK → object storage. PRD §9.4, §12.10. Fase 2.
-    throw new GeminiApiError("Generasi gambar (Nano Banana) belum diimplementasikan (Fase 2).", 501, false);
+  async generateImage(cred: Credential, prompt: string, _opts?: ImageOpts): Promise<{ imageRef: string }> {
+    // Nano Banana (image model) via generateContent → inline image bytes. PRD §9.4, §12.10.
+    // Returned as a data URL; object storage (expiring URLs) lands with the storage seam. §9.4.7.
+    const model = requireModel("image_gen");
+    const body: Record<string, unknown> = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["IMAGE"] },
+    };
+    const data = await this.generateContent(cred, model, body);
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const inline = parts.find((p) => p.inlineData?.data !== undefined)?.inlineData;
+    if (inline?.data === undefined) {
+      throw new GeminiApiError("Gemini tidak mengembalikan gambar.", 200, false);
+    }
+    return { imageRef: `data:${inline.mimeType ?? "image/png"};base64,${inline.data}` };
   }
   async understandImage<T = unknown>(
     _cred: Credential,

@@ -250,9 +250,34 @@ export class OpenAIAdapter implements LLMProvider {
   async pollDeepResearch(_cred: Credential, _handle: DeepResearchHandle): Promise<DeepResearchHandle> {
     throw new OpenAIApiError("Deep Research polling belum diimplementasikan (Fase 1).", 501, false);
   }
-  async generateImage(_cred: Credential, _prompt: string, _opts?: ImageOpts): Promise<{ imageRef: string }> {
-    // gpt-image (needs Org Verification) → object storage. PRD §9.4, §12.15. Fase 2.
-    throw new OpenAIApiError("Generasi gambar (gpt-image) belum diimplementasikan (Fase 2).", 501, false);
+  async generateImage(cred: Credential, prompt: string, opts?: ImageOpts): Promise<{ imageRef: string }> {
+    // gpt-image via the Image API → base64 → data URL. Requires Org Verification on the user's account
+    // (capability-gated upstream; this surfaces a friendly error if not). PRD §9.4, §12.15.
+    const model = requireModel("image_gen");
+    return withRetry(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${OPENAI_BASE}/images/generations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${cred.secret}` },
+          body: JSON.stringify({ model, prompt, size: opts?.size ?? "1024x1024", n: opts?.n ?? 1 }),
+        });
+      } catch {
+        throw new OpenAIApiError("Gagal menghubungi OpenAI Image API.", 0, true);
+      }
+      if (!res.ok) {
+        const c = classifyValidationStatus(res.status);
+        const detail = c.kind === "ok" ? "" : c.detail;
+        throw new OpenAIApiError(detail || `OpenAI Image API error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
+      }
+      const data = (await res.json()) as { data?: { b64_json?: string }[]; error?: { message?: string } | null };
+      if (data.error !== null && data.error !== undefined) {
+        throw new OpenAIApiError(data.error.message ?? "OpenAI mengembalikan error.", 200, false);
+      }
+      const b64 = data.data?.[0]?.b64_json;
+      if (b64 === undefined) throw new OpenAIApiError("OpenAI tidak mengembalikan gambar.", 200, false);
+      return { imageRef: `data:image/png;base64,${b64}` };
+    });
   }
   async understandImage<T = unknown>(
     _cred: Credential,

@@ -5,6 +5,7 @@
 import type { ProjectService } from "../services/project-service";
 import type { ResearchService } from "../services/research-service";
 import type { PlannerService } from "../services/planner-service";
+import type { BrandService } from "../services/brand-service";
 import type { DocsService } from "../services/docs-service";
 import type { McpAuditStore, McpClientStore, McpClientView } from "./client-store";
 import type { McpContext } from "./types";
@@ -14,6 +15,7 @@ export interface McpServices {
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
+  brand: BrandService;
   docs: DocsService;
 }
 
@@ -71,6 +73,7 @@ export class McpGatewayService {
       projects: this.services.projects,
       research: this.services.research,
       planner: this.services.planner,
+      brand: this.services.brand,
       docs: this.services.docs,
     };
   }

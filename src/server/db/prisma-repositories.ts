@@ -7,8 +7,14 @@ import { Prisma } from "@prisma/client";
 import type { Repository } from "@/server/domain/repositories";
 import type {
   BoundFinancials,
+  BrandAsset,
+  BrandKit,
+  BrandStrategy,
+  BrandVisualTokens,
+  BrandVoice,
   BusinessDocument,
   BusinessPlan,
+  NamingOption,
   OnboardingProfile,
   PitchDeckSlots,
   ProfileInput,
@@ -193,6 +199,52 @@ class PrismaPlanRepository implements Repository<BusinessPlan> {
     return p;
   }
   async list(): Promise<BusinessPlan[]> {
+    return [];
+  }
+}
+
+// ---------- BrandKit (one per project) ----------
+class PrismaBrandKitRepository implements Repository<BrandKit> {
+  async get(id: string): Promise<BrandKit | null> {
+    const row = await prisma.brandKit.findUnique({ where: { id } });
+    if (row === null) return null;
+    const naming = (row.naming as unknown as NamingOption[]) ?? [];
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      status: row.status as BrandKit["status"],
+      version: row.version,
+      strategy: (row.strategy as unknown as BrandStrategy) ?? { essence: "", positioning: "", personality: [], pillars: [] },
+      selectedName: row.selectedName ?? "",
+      naming,
+      voice: (row.voice as unknown as BrandVoice) ?? { attributes: [], taglines: [], samples: [], dos: [], donts: [] },
+      visualTokens: row.visualTokens as unknown as BrandVisualTokens,
+      assets: (row.assets as unknown as BrandAsset[]) ?? [],
+      stale: row.stale,
+      generatedAt: row.generatedAt.toISOString(),
+    };
+  }
+  async save(k: BrandKit): Promise<BrandKit> {
+    const fields = {
+      status: k.status,
+      version: k.version,
+      selectedName: k.selectedName,
+      strategy: json(k.strategy),
+      naming: json(k.naming),
+      voice: json(k.voice),
+      visualTokens: json(k.visualTokens),
+      assets: json(k.assets),
+      stale: k.stale,
+      generatedAt: new Date(k.generatedAt),
+    };
+    await prisma.brandKit.upsert({
+      where: { projectId: k.projectId },
+      create: { id: k.id, project: { connect: { id: k.projectId } }, ...fields },
+      update: fields,
+    });
+    return k;
+  }
+  async list(): Promise<BrandKit[]> {
     return [];
   }
 }
@@ -447,6 +499,7 @@ export interface PrismaPersistence {
   projects: PrismaProjectRepository;
   reports: PrismaResearchRepository;
   plans: PrismaPlanRepository;
+  brandKits: PrismaBrandKitRepository;
   documents: PrismaDocumentRepository;
   credentials: PrismaCredentialStore;
   mcpClients: PrismaMcpClientStore;
@@ -461,6 +514,7 @@ export function createPrismaPersistence(): PrismaPersistence {
     projects: new PrismaProjectRepository(),
     reports: new PrismaResearchRepository(),
     plans: new PrismaPlanRepository(),
+    brandKits: new PrismaBrandKitRepository(),
     documents: new PrismaDocumentRepository(),
     credentials: new PrismaCredentialStore(),
     mcpClients: new PrismaMcpClientStore(),
