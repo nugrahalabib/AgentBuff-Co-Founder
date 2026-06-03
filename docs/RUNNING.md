@@ -24,7 +24,7 @@ Tanpa `.env` pun aplikasi tetap jalan (memakai default dev + KEK acak per-restar
 
 ## Alur uji (end-to-end)
 1. **Landing** (`/`) → **Mulai** → **Onboarding** (`/onboarding`).
-2. **Tautkan API key**: pilih Gemini/OpenAI, tempel key, **Validasi key**. Key divalidasi nyata ke provider, lalu disimpan terenkripsi pada sesimu. → **Lanjut ke Dashboard**.
+2. **Tautkan kredensial**: pilih **Gemini / OpenAI / Codex (Sign in with ChatGPT)**, tempel key atau token, **Validasi**. Divalidasi nyata ke provider, lalu disimpan terenkripsi pada sesimu. → **Lanjut ke Dashboard**.
 3. **Dashboard** (`/dashboard`): ketik ide bisnis → **Buat Project**.
 4. **Workspace project** (`/project/<id>`):
    - **Jalankan Validasi (AI)** → riset pasar *grounded* dengan key-mu → skor kelayakan **deterministik** + rekomendasi + **sumber yang bisa diklik**.
@@ -45,7 +45,10 @@ pnpm build        # next build (sekaligus TS check)
 pnpm exec prisma validate
 ```
 
+## Persistensi (Postgres vs in-memory)
+- Runtime **otomatis**: jika `DATABASE_URL` di-set (mis. di `.env.local`), app menyimpan ke **PostgreSQL via Prisma**; jika tidak, **in-memory** (reset saat restart).
+- Untuk Postgres lewat VPS saat dev, jaga **SSH tunnel** tetap hidup: `ssh -N -L 55432:localhost:5432 agentbuff-vps`. Detail di [AUTH-SETUP.md](AUTH-SETUP.md). Sekali setup tabel: `pnpm exec prisma db push`.
+
 ## Catatan
-- **Data in-memory**: project/sesi tersimpan di memori proses → reset saat server restart. Untuk persistensi, sambungkan Prisma + Postgres (schema sudah ada di `prisma/schema.prisma`; tukar repo in-memory di `src/server/runtime.ts`).
-- **Auth**: sesi tamu via cookie bertanda-tangan. Untuk login Google, pasang Auth.js + isi `GOOGLE_CLIENT_ID/SECRET` (PRD §9.1).
+- **Auth**: sesi tamu via cookie bertanda-tangan. Untuk login Google, pasang Auth.js + isi `GOOGLE_CLIENT_ID/SECRET` — lihat [AUTH-SETUP.md](AUTH-SETUP.md).
 - **Fitur AI berat** (Deep Research penuh, generasi gambar, render PDF) masih stub yang jelas — butuh key live & Chromium; lihat [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
