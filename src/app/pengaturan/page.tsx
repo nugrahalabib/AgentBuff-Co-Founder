@@ -7,6 +7,7 @@ import { AppHeader } from "@/ui/app-header";
 import { GoogleSignInButton, SignOutButton } from "@/ui/google-auth";
 import { KeyManager } from "./key-manager";
 import { McpTokens } from "./mcp-tokens";
+import { DataRights } from "./data-rights";
 
 export const metadata: Metadata = { title: "Pengaturan" };
 
@@ -109,6 +110,11 @@ export default async function SettingsPage() {
         {/* MCP Agent Gateway tokens */}
         <section className="mt-6">
           <McpTokens initialClients={mcpClients} />
+        </section>
+
+        {/* Data & privacy (UU PDP) */}
+        <section className="mt-6">
+          <DataRights />
         </section>
       </main>
     </div>

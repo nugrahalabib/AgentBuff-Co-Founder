@@ -518,6 +518,11 @@ export async function savePrismaProfile(userId: string, input: ProfileInput): Pr
   }
 }
 
+/** Erase a user and everything that cascades from them (credentials, projects+artifacts, MCP, usage). §13.4. */
+export async function deletePrismaUser(userId: string): Promise<void> {
+  await prisma.user.delete({ where: { id: userId } }).catch(() => undefined);
+}
+
 export async function getPrismaProfile(userId: string): Promise<OnboardingProfile | null> {
   const row = await prisma.onboardingProfile.findUnique({ where: { userId } });
   return row === null
@@ -544,6 +549,7 @@ export interface PrismaPersistence {
   ensureUser: (userId: string) => Promise<void>;
   saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   getProfile: (userId: string) => Promise<OnboardingProfile | null>;
+  deleteUser: (userId: string) => Promise<void>;
 }
 
 export function createPrismaPersistence(): PrismaPersistence {
@@ -560,5 +566,6 @@ export function createPrismaPersistence(): PrismaPersistence {
     ensureUser,
     saveProfile: savePrismaProfile,
     getProfile: getPrismaProfile,
+    deleteUser: deletePrismaUser,
   };
 }

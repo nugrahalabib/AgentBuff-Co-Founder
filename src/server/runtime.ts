@@ -19,6 +19,7 @@ import { PlannerService } from "@/server/services/planner-service";
 import { BrandService } from "@/server/services/brand-service";
 import { DocsService } from "@/server/services/docs-service";
 import { CredentialService } from "@/server/services/credential-service";
+import { AccountService } from "@/server/services/account-service";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
 import {
@@ -42,6 +43,7 @@ export interface AppRuntime {
   planner: PlannerService;
   brand: BrandService;
   docs: DocsService;
+  account: AccountService;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
   repos: {
@@ -76,6 +78,7 @@ function createRuntime(): AppRuntime {
   let ensureUser: (userId: string) => Promise<void>;
   let saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   let getProfile: (userId: string) => Promise<OnboardingProfile | null>;
+  let deleteUser: (userId: string) => Promise<void>;
 
   if (usePostgres) {
     const p = createPrismaPersistence();
@@ -91,15 +94,24 @@ function createRuntime(): AppRuntime {
     ensureUser = p.ensureUser;
     saveProfile = p.saveProfile;
     getProfile = p.getProfile;
+    deleteUser = p.deleteUser; // Postgres cascade from the User row
   } else {
-    credentials = new InMemoryCredentialStore();
-    projectsRepo = new InMemoryRepository<Project>();
-    reportsRepo = new InMemoryRepository<ResearchReport>();
-    plansRepo = new InMemoryRepository<BusinessPlan>();
-    brandKitsRepo = new InMemoryRepository<BrandKit>();
-    documentsRepo = new InMemoryRepository<BusinessDocument>();
-    usage = new InMemoryUsageRecorder();
-    mcpClients = new InMemoryMcpClientStore();
+    const memCredentials = new InMemoryCredentialStore();
+    const memProjects = new InMemoryRepository<Project>();
+    const memReports = new InMemoryRepository<ResearchReport>();
+    const memPlans = new InMemoryRepository<BusinessPlan>();
+    const memBrand = new InMemoryRepository<BrandKit>();
+    const memDocs = new InMemoryRepository<BusinessDocument>();
+    const memUsage = new InMemoryUsageRecorder();
+    const memMcp = new InMemoryMcpClientStore();
+    credentials = memCredentials;
+    projectsRepo = memProjects;
+    reportsRepo = memReports;
+    plansRepo = memPlans;
+    brandKitsRepo = memBrand;
+    documentsRepo = memDocs;
+    usage = memUsage;
+    mcpClients = memMcp;
     mcpAudit = new InMemoryMcpAuditStore();
     ensureUser = async () => {};
     const profiles = new Map<string, OnboardingProfile>();
@@ -113,6 +125,19 @@ function createRuntime(): AppRuntime {
       });
     };
     getProfile = async (userId) => profiles.get(userId) ?? null;
+    deleteUser = async (userId) => {
+      const owned = await memProjects.list((p) => p.ownerUserId === userId);
+      const pids = new Set(owned.map((p) => p.id));
+      await memProjects.deleteWhere((p) => p.ownerUserId === userId);
+      await memReports.deleteWhere((r) => pids.has(r.projectId));
+      await memPlans.deleteWhere((p) => pids.has(p.projectId));
+      await memBrand.deleteWhere((b) => pids.has(b.projectId));
+      await memDocs.deleteWhere((d) => pids.has(d.projectId));
+      memCredentials.clearUser(userId);
+      memMcp.clearUser(userId);
+      memUsage.clearUser(userId);
+      profiles.delete(userId);
+    };
   }
 
   const idGen = (): string => randomUUID();
@@ -127,18 +152,30 @@ function createRuntime(): AppRuntime {
   const brand = new BrandService({ brandKits: brandKitsRepo, registry, idGen, now });
   const docs = new DocsService({ documents: documentsRepo, registry, idGen, now });
   const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner, brand, docs }, idGen, now, mcpAudit);
+  const credentialService = new CredentialService(credentials, master);
+  const account = new AccountService({
+    getProfile,
+    credentialSummary: (userId) => credentialService.summary(userId),
+    listMcpClients: (userId) => mcpGateway.listClients(userId),
+    usageSummary: (userId) => usage.summary(userId),
+    listProjects: (userId) => projects.listForUser(userId),
+    getState: (projectId) => projects.getState(projectId),
+    deleteUser,
+    now,
+  });
 
   return {
     master,
     credentials,
     registry,
     usage,
-    credentialService: new CredentialService(credentials, master),
+    credentialService,
     projects,
     research,
     planner,
     brand,
     docs,
+    account,
     mcp: buildToolRegistry(),
     mcpGateway,
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, brandKits: brandKitsRepo, documents: documentsRepo },

@@ -22,4 +22,15 @@ export class InMemoryRepository<T extends { id: string }> implements Repository<
     const all = [...this.items.values()];
     return filter === undefined ? all : all.filter(filter);
   }
+  /** Remove all entities matching the predicate. Returns the number deleted. (UU PDP erasure, §13.4.) */
+  async deleteWhere(predicate: (entity: T) => boolean): Promise<number> {
+    let n = 0;
+    for (const [id, item] of this.items) {
+      if (predicate(item)) {
+        this.items.delete(id);
+        n += 1;
+      }
+    }
+    return n;
+  }
 }

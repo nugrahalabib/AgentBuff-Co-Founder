@@ -77,4 +77,10 @@ export class InMemoryCredentialStore implements UpsertableCredentialStore {
   async listForUser(userId: string): Promise<StoredCredential[]> {
     return this.creds.filter((c) => c.userId === userId);
   }
+  /** Remove all of a user's credentials (account erasure, §13.4). */
+  clearUser(userId: string): void {
+    for (let i = this.creds.length - 1; i >= 0; i--) {
+      if (this.creds[i]!.userId === userId) this.creds.splice(i, 1);
+    }
+  }
 }

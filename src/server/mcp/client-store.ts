@@ -76,6 +76,12 @@ export class InMemoryMcpClientStore implements McpClientStore {
     const r = this.rows.find((x) => x.id === clientId);
     if (r !== undefined) r.lastUsedAt = atIso;
   }
+  /** Remove all of a user's MCP clients (account erasure, §13.4). */
+  clearUser(userId: string): void {
+    for (let i = this.rows.length - 1; i >= 0; i--) {
+      if (this.rows[i]!.ownerUserId === userId) this.rows.splice(i, 1);
+    }
+  }
 }
 
 export class InMemoryMcpAuditStore implements McpAuditStore {

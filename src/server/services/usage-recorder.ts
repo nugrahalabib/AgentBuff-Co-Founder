@@ -60,4 +60,10 @@ export class InMemoryUsageRecorder implements UsageRecorder {
       limit,
     );
   }
+  /** Remove all of a user's usage records (account erasure, §13.4). */
+  clearUser(userId: string): void {
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      if (this.entries[i]!.userId === userId) this.entries.splice(i, 1);
+    }
+  }
 }
