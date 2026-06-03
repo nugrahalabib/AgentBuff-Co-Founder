@@ -1,0 +1,249 @@
+// AgentBuff Co-Founder — data model. PRD §11.
+// Flexible artifact structures (financials.monthly[], narrative, citations…) are stored as Json
+// (PRD §11.3). BYOK secrets are stored ONLY as envelope ciphertext + fingerprint (PRD §13.1).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  googleSub   String   @unique
+  email       String   @unique
+  displayName String?
+  locale      String   @default("id")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  credentials ByokCredential[]
+  onboarding  OnboardingProfile?
+  projects    Project[]
+  mcpClients  McpClient[]
+  usageEvents UsageEvent[]
+}
+
+enum Provider {
+  gemini
+  openai
+  openai_codex
+}
+
+enum CredType {
+  api_key
+  oauth_token
+}
+
+enum CredStatus {
+  active
+  invalid
+  revoked
+}
+
+model ByokCredential {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        Provider
+  credType        CredType
+  ciphertext      String // envelope-encrypted; NEVER plaintext
+  fingerprint     String
+  capabilities    Json
+  isDefault       Boolean    @default(false)
+  status          CredStatus @default(active)
+  lastValidatedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model OnboardingProfile {
+  userId      String   @id
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sector      String?
+  stage       String?
+  primaryGoal String?
+  budgetBand  String?
+  createdAt   DateTime @default(now())
+}
+
+enum ProjectStatus {
+  draft
+  researching
+  planning
+  branding
+  documenting
+  complete
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  ownerUserId    String
+  owner          User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  title          String
+  ideaText       String
+  sector         String?
+  geography      String?
+  stage          String?
+  primaryGoal    String?
+  status         ProjectStatus @default(draft)
+  contextCacheId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  research    ResearchReport?
+  plan        BusinessPlan?
+  brandKit    BrandKit?
+  documents   Document[]
+  usageEvents UsageEvent[]
+
+  @@index([ownerUserId])
+}
+
+enum Recommendation {
+  go
+  refine
+  reconsider
+}
+
+model ResearchReport {
+  id                  String         @id @default(cuid())
+  projectId           String         @unique
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status              String
+  validationScore     Int
+  recommendation      Recommendation
+  scoreBreakdown      Json
+  signals             Json
+  summary             String?
+  market              Json?
+  competitors         Json?
+  pricing             Json?
+  risks               Json?
+  citations           Json
+  sources             Json
+  isGrounded          Boolean        @default(false)
+  groundingQueryCount Int            @default(0)
+  sourcePath          String?
+  interactionId       String?
+  version             Int            @default(1)
+  generatedAt         DateTime       @default(now())
+}
+
+model BusinessPlan {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status      String
+  version     Int      @default(1)
+  inputs      Json
+  financials  Json // deterministic engine output — never authored by an LLM
+  narrative   Json?
+  stale       Boolean  @default(false)
+  generatedAt DateTime @default(now())
+}
+
+model BrandKit {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status       String
+  version      Int      @default(1)
+  strategy     Json?
+  naming       Json?
+  voice        Json?
+  visualTokens Json?
+  assets       Json?
+  generatedAt  DateTime @default(now())
+}
+
+enum DocumentType {
+  proposal
+  pitch_deck
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type           DocumentType
+  templateId     String?
+  theme          String?
+  contentJson    Json
+  brandTokensRef String?
+  assetRefs      Json?
+  htmlRef        String?
+  pdfRef         String?
+  pageCount      Int?
+  renderStatus   String?
+  stale          Boolean      @default(false)
+  version        Int          @default(1)
+  generatedAt    DateTime     @default(now())
+
+  @@index([projectId])
+}
+
+model UsageEvent {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  source          String // ui | mcp
+  operation       String
+  modelUsed       String?
+  tokensIn        Int?
+  tokensOut       Int?
+  groundedQueries Int?
+  imagesGenerated Int?
+  estCostBand     String?
+  ts              DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+model McpClient {
+  id            String        @id @default(cuid())
+  name          String
+  ownerUserId   String
+  owner         User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  oauthClientId String        @unique
+  scopes        String[]
+  status        String        @default("active")
+  createdAt     DateTime      @default(now())
+  auditLogs     McpAuditLog[]
+
+  @@index([ownerUserId])
+}
+
+model McpAuditLog {
+  id           String    @id @default(cuid())
+  clientId     String
+  client       McpClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId       String
+  tool         String
+  argsHash     String?
+  resultStatus String
+  quotaEstimate String?
+  ts           DateTime  @default(now())
+
+  @@index([clientId])
+}
+
+model PartnerFederation {
+  id                String   @id @default(cuid())
+  partnerId         String   @unique
+  name              String
+  publicKeyRef      String?
+  secretRef         String?
+  redirectAllowlist String[]
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+}

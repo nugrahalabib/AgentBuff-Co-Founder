@@ -1,0 +1,16 @@
+{
+  "name": "AgentBuff Co-Founder",
+  "short_name": "AgentBuff",
+  "description": "Co-Founder AI untuk membangun bisnismu dari nol — validasi, business plan, brand, dan dokumen siap investor.",
+  "lang": "id",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F3FF",
+  "theme_color": "#6366F1",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

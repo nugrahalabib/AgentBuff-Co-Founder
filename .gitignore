@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/*
+
+# Env & secrets — NEVER commit real credentials (BYOK keys are runtime + encrypted)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Build output
+.next/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Claude Code: commit .claude/ (settings.json, skills, agents, rules) and .mcp.json.
+# Only personal/local settings are ignored (Claude Code adds this automatically too):
+.claude/settings.local.json
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Generated artifacts (PDF/images) — store in object storage, not repo
+/tmp-artifacts/
+*.local

@@ -1,0 +1,13 @@
+{
+  "//": "Project-scoped MCP servers, shared with the team via git (PRD §12.7). Only servers that need NO secrets are listed here. Add token-based servers (e.g. github) locally with: claude mcp add github -- npx -y @modelcontextprotocol/server-github",
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}

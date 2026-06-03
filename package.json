@@ -1,0 +1,37 @@
+{
+  "name": "agentbuff-cofounder",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AgentBuff Co-Founder — AI Co-Founder for Indonesian UMKM. Foundation phase: deterministic Financial Engine + Provider Abstraction Layer. See docs/PRD-AgentBuff-CoFounder.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev --port 1717",
+    "build": "next build",
+    "start": "next start --port 1717",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^22.19.19",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^3.0.0",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "next": "^16.2.7",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}
