@@ -9,7 +9,7 @@ import { LocalMasterKey } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
 import { InMemoryRepository, type Repository } from "@/server/domain/repositories";
-import type { BusinessPlan, Project, ResearchReport } from "@/server/domain/types";
+import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
 import { ProjectService } from "@/server/services/project-service";
 import { ResearchService } from "@/server/services/research-service";
 import { PlannerService } from "@/server/services/planner-service";
@@ -32,6 +32,8 @@ export interface AppRuntime {
   };
   /** Ensure the (guest) User row exists before creating FK-constrained rows. No-op in memory mode. */
   ensureUser: (userId: string) => Promise<void>;
+  saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
+  getProfile: (userId: string) => Promise<OnboardingProfile | null>;
   persistence: "postgres" | "memory";
 }
 
@@ -47,6 +49,8 @@ function createRuntime(): AppRuntime {
   let reportsRepo: Repository<ResearchReport>;
   let plansRepo: Repository<BusinessPlan>;
   let ensureUser: (userId: string) => Promise<void>;
+  let saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
+  let getProfile: (userId: string) => Promise<OnboardingProfile | null>;
 
   if (usePostgres) {
     const p = createPrismaPersistence();
@@ -55,12 +59,25 @@ function createRuntime(): AppRuntime {
     reportsRepo = p.reports;
     plansRepo = p.plans;
     ensureUser = p.ensureUser;
+    saveProfile = p.saveProfile;
+    getProfile = p.getProfile;
   } else {
     credentials = new InMemoryCredentialStore();
     projectsRepo = new InMemoryRepository<Project>();
     reportsRepo = new InMemoryRepository<ResearchReport>();
     plansRepo = new InMemoryRepository<BusinessPlan>();
     ensureUser = async () => {};
+    const profiles = new Map<string, OnboardingProfile>();
+    saveProfile = async (userId, input) => {
+      profiles.set(userId, {
+        userId,
+        sector: input.sector,
+        stage: input.stage,
+        primaryGoal: input.primaryGoal,
+        budgetBand: input.budgetBand,
+      });
+    };
+    getProfile = async (userId) => profiles.get(userId) ?? null;
   }
 
   const registry = new DefaultProviderRegistry(credentials, master);
@@ -77,6 +94,8 @@ function createRuntime(): AppRuntime {
     mcp: buildToolRegistry(),
     repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo },
     ensureUser,
+    saveProfile,
+    getProfile,
     persistence: usePostgres ? "postgres" : "memory",
   };
 }

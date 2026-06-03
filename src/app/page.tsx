@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { LinkButton } from "@/ui/button";
+import { GoogleSignInButton } from "@/ui/google-auth";
 
 export default function LandingPage() {
   return (
@@ -20,12 +21,11 @@ export default function LandingPage() {
           <strong>brand</strong>, proposal, dan <strong>pitch deck</strong> siap-investor — dalam hitungan jam.
           Gratis, pakai API key-mu sendiri.
         </p>
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <LinkButton href="/onboarding" size="lg">
-            <GoogleMark className="h-5 w-5" />
-            Mulai Gratis dengan Google
-          </LinkButton>
-          <LinkButton href="#cara-kerja" variant="secondary" size="lg">
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <div className="w-full max-w-xs">
+            <GoogleSignInButton callbackUrl="/onboarding" label="Mulai Gratis dengan Google" variant="primary" size="lg" />
+          </div>
+          <LinkButton href="#cara-kerja" variant="ghost" size="md">
             Lihat cara kerjanya
           </LinkButton>
         </div>
@@ -114,10 +114,9 @@ export default function LandingPage() {
           Mulai dari ide pertamamu. Tanpa kartu kredit, tanpa biaya tersembunyi.
         </p>
         <div className="mt-7 flex justify-center">
-          <LinkButton href="/onboarding" size="lg">
-            <GoogleMark className="h-5 w-5" />
-            Mulai Gratis dengan Google
-          </LinkButton>
+          <div className="w-full max-w-xs">
+            <GoogleSignInButton callbackUrl="/onboarding" label="Mulai Gratis dengan Google" variant="primary" size="lg" />
+          </div>
         </div>
       </section>
 

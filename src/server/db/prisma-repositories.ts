@@ -5,7 +5,7 @@
 
 import { Prisma } from "@prisma/client";
 import type { Repository } from "@/server/domain/repositories";
-import type { BusinessPlan, Project, ProjectStatus, ResearchReport } from "@/server/domain/types";
+import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ProjectStatus, ResearchReport } from "@/server/domain/types";
 import type { CredentialStore, StoredCredential } from "@/lib/ai/credential-store";
 import type { Capabilities, CredentialType, ProviderId } from "@/lib/ai/types";
 import type { Recommendation, ScoreBreakdown, ValidationSignals } from "@/server/engine/research/index";
@@ -200,12 +200,40 @@ export async function ensureUser(userId: string): Promise<void> {
   });
 }
 
+export async function savePrismaProfile(userId: string, input: ProfileInput): Promise<void> {
+  const fields = {
+    sector: input.sector ?? null,
+    stage: input.stage ?? null,
+    primaryGoal: input.primaryGoal ?? null,
+    budgetBand: input.budgetBand ?? null,
+  };
+  await prisma.onboardingProfile.upsert({ where: { userId }, create: { userId, ...fields }, update: fields });
+  if (input.displayName !== undefined && input.displayName !== "") {
+    await prisma.user.update({ where: { id: userId }, data: { displayName: input.displayName } }).catch(() => undefined);
+  }
+}
+
+export async function getPrismaProfile(userId: string): Promise<OnboardingProfile | null> {
+  const row = await prisma.onboardingProfile.findUnique({ where: { userId } });
+  return row === null
+    ? null
+    : {
+        userId: row.userId,
+        sector: row.sector ?? undefined,
+        stage: row.stage ?? undefined,
+        primaryGoal: row.primaryGoal ?? undefined,
+        budgetBand: row.budgetBand ?? undefined,
+      };
+}
+
 export interface PrismaPersistence {
   projects: PrismaProjectRepository;
   reports: PrismaResearchRepository;
   plans: PrismaPlanRepository;
   credentials: PrismaCredentialStore;
   ensureUser: (userId: string) => Promise<void>;
+  saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
+  getProfile: (userId: string) => Promise<OnboardingProfile | null>;
 }
 
 export function createPrismaPersistence(): PrismaPersistence {
@@ -215,5 +243,7 @@ export function createPrismaPersistence(): PrismaPersistence {
     plans: new PrismaPlanRepository(),
     credentials: new PrismaCredentialStore(),
     ensureUser,
+    saveProfile: savePrismaProfile,
+    getProfile: getPrismaProfile,
   };
 }

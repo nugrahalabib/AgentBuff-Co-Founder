@@ -1,76 +1,14 @@
-"use client";
-
-import { useState } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Button } from "@/ui/button";
+import { auth } from "@/auth";
 import { GoogleSignInButton } from "@/ui/google-auth";
+import { OnboardingWizard } from "./onboarding-wizard";
 
-type Provider = "gemini" | "openai" | "openai_codex";
-type Status = "idle" | "validating" | "valid" | "error";
+export const metadata: Metadata = { title: "Onboarding" };
 
-const GUIDE: Record<Provider, { label: string; hint: string; url: string; site: string; placeholder: string }> = {
-  gemini: {
-    label: "Gemini API key",
-    hint: "Paling ramah pemula — free tier Google dermawan. Disarankan.",
-    url: "https://aistudio.google.com/apikey",
-    site: "Google AI Studio",
-    placeholder: "AIza…",
-  },
-  openai: {
-    label: "OpenAI API key",
-    hint: "Usage-based via OpenAI Platform (Responses API).",
-    url: "https://platform.openai.com/api-keys",
-    site: "OpenAI Platform",
-    placeholder: "sk-…",
-  },
-  openai_codex: {
-    label: "Codex — Sign in with ChatGPT",
-    hint: "Pakai langganan ChatGPT-mu via token Codex (jalankan `codex login`, lalu tempel access token-nya).",
-    url: "https://developers.openai.com/codex/",
-    site: "dokumentasi Codex",
-    placeholder: "access token Codex / ChatGPT",
-  },
-};
-
-export default function OnboardingPage() {
-  const [provider, setProvider] = useState<Provider>("gemini");
-  const [apiKey, setApiKey] = useState("");
-  const [show, setShow] = useState(false);
-  const [status, setStatus] = useState<Status>("idle");
-  const [message, setMessage] = useState("");
-  const [caps, setCaps] = useState<string[]>([]);
-
-  async function validate() {
-    setStatus("validating");
-    setMessage("");
-    setCaps([]);
-    try {
-      const res = await fetch("/api/byok/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, apiKey }),
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        detail?: string;
-        error?: string;
-        capabilities?: Record<string, boolean>;
-      };
-      if (data.ok) {
-        setStatus("valid");
-        setMessage("Kredensial valid ✓ — kamu siap memakai fitur AI.");
-        setCaps(Object.entries(data.capabilities ?? {}).filter(([, v]) => v).map(([k]) => k));
-      } else {
-        setStatus("error");
-        setMessage(data.error ?? data.detail ?? "Kredensial ditolak. Periksa kembali key-mu.");
-      }
-    } catch {
-      setStatus("error");
-      setMessage("Tidak bisa menghubungi server validasi. Coba lagi.");
-    }
-  }
-
-  const guide = GUIDE[provider];
+export default async function OnboardingPage() {
+  const session = await auth();
+  const user = session?.user;
 
   return (
     <main className="mx-auto max-w-lg px-5 py-10">
@@ -78,125 +16,27 @@ export default function OnboardingPage() {
         ← Kembali
       </Link>
 
-      <div className="mt-6 flex items-center gap-2">
-        {[1, 2, 3].map((n) => (
-          <span key={n} className={`h-1.5 flex-1 rounded-full ${n === 1 ? "bg-primary" : "bg-border"}`} />
-        ))}
-      </div>
-
-      <h1 className="mt-6 font-display text-2xl">Tautkan API key-mu</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        AgentBuff Co-Founder gratis — biaya AI memakai kuota key milikmu (BYOK). Key-mu dienkripsi dan tak pernah kami
-        lihat dalam bentuk asli.
-      </p>
-
-      {/* Google login (optional) */}
-      <div className="mt-6">
-        <GoogleSignInButton />
-        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" /> atau tautkan API key langsung <span className="h-px flex-1 bg-border" />
+      {user ? (
+        <div className="mt-6">
+          <OnboardingWizard initialName={user.name ?? ""} />
         </div>
-      </div>
-
-      {/* Provider selector */}
-      <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {(Object.keys(GUIDE) as Provider[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => {
-              setProvider(p);
-              setStatus("idle");
-              setMessage("");
-            }}
-            className={`cursor-pointer rounded-card border p-3 text-left text-sm transition-colors ${
-              provider === p ? "border-primary bg-primary/5" : "border-border bg-surface hover:bg-muted"
-            }`}
-          >
-            <span className="font-semibold">{GUIDE[p].label}</span>
-            <span className="mt-1 block text-xs text-muted-foreground">{GUIDE[p].hint}</span>
-          </button>
-        ))}
-      </div>
-
-      <a
-        href={guide.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
-      >
-        Buka {guide.site} untuk membuat {provider === "openai_codex" ? "/menyalin token" : "key"} ↗
-      </a>
-
-      {/* Paste field */}
-      <div className="mt-4">
-        <label className="text-sm font-medium" htmlFor="apikey">
-          Tempel API key / token
-        </label>
-        <div className="mt-1.5 flex gap-2">
-          <input
-            id="apikey"
-            type={show ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={guide.placeholder}
-            autoComplete="off"
-            className="h-12 flex-1 rounded-xl border border-border bg-surface px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
-          />
-          <button
-            type="button"
-            onClick={() => setShow((s) => !s)}
-            className="cursor-pointer rounded-xl border border-border px-3 text-xs text-muted-foreground hover:bg-muted"
-          >
-            {show ? "Sembunyikan" : "Lihat"}
-          </button>
+      ) : (
+        <div className="mt-10 rounded-card border border-border bg-surface p-7 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-on-primary">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden>
+              <path d="M12 2l1.9 5.6L19.5 9l-5.6 1.9L12 16.5 10.1 10.9 4.5 9l5.6-1.4L12 2z" />
+            </svg>
+          </div>
+          <h1 className="mt-4 font-display text-2xl">Daftar / Masuk dulu</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Buat akun gratis dengan Google untuk memulai. Setelah itu kamu isi profil singkat & ide bisnismu, lalu (opsional)
+            tautkan API key.
+          </p>
+          <div className="mt-6">
+            <GoogleSignInButton callbackUrl="/onboarding" label="Daftar Gratis dengan Google" variant="primary" />
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">Gratis selamanya · pakai kuota API key-mu sendiri (BYOK).</p>
         </div>
-      </div>
-
-      <Button
-        onClick={validate}
-        disabled={apiKey.trim() === "" || status === "validating"}
-        size="lg"
-        className="mt-4 w-full"
-      >
-        {status === "validating" ? "Memeriksa key…" : "Validasi key"}
-      </Button>
-
-      {/* Status */}
-      {message !== "" && (
-        <div
-          className={`mt-4 rounded-card border p-4 text-sm ${
-            status === "valid"
-              ? "border-accent/30 bg-accent/5 text-accent"
-              : "border-destructive/30 bg-destructive/5 text-destructive"
-          }`}
-        >
-          {message}
-          {caps.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {caps.map((c) => (
-                <span key={c} className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">
-                  {c}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <p className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <rect x="5" y="11" width="14" height="9" rx="2" />
-          <path d="M8 11V7a4 4 0 1 1 8 0v4" />
-        </svg>
-        Key hanya dipakai untuk memvalidasi koneksi; tidak disimpan di langkah ini.
-      </p>
-
-      {status === "valid" && (
-        <Link href="/dashboard" className="mt-6 block">
-          <Button variant="accent" size="lg" className="w-full">
-            Lanjut ke Dashboard →
-          </Button>
-        </Link>
       )}
     </main>
   );

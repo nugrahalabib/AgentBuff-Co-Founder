@@ -1,21 +1,46 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { Button } from "@/ui/button";
 
-export function GoogleSignInButton({ callbackUrl = "/dashboard" }: { callbackUrl?: string }) {
+type Variant = "primary" | "accent" | "secondary" | "ghost";
+
+export function GoogleSignInButton({
+  callbackUrl = "/onboarding",
+  label = "Login dengan Google",
+  variant = "secondary",
+  size = "lg",
+}: {
+  callbackUrl?: string;
+  label?: string;
+  variant?: Variant;
+  size?: "md" | "lg";
+}) {
   return (
     <Button
       onClick={() => {
         void signIn("google", { callbackUrl });
       }}
-      variant="secondary"
-      size="lg"
+      variant={variant}
+      size={size}
       className="w-full"
     >
       <GoogleMark className="h-5 w-5" />
-      Login dengan Google
+      {label}
     </Button>
+  );
+}
+
+export function SignOutButton() {
+  return (
+    <button
+      onClick={() => {
+        void signOut({ callbackUrl: "/" });
+      }}
+      className="cursor-pointer rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+    >
+      Keluar
+    </button>
   );
 }
 

@@ -79,3 +79,20 @@ export interface ProjectState {
   research?: ResearchReport;
   plan?: BusinessPlan;
 }
+
+/** Onboarding profile — the "data diri / bisnis" we collect to personalize. PRD §9.1.5, §11. */
+export interface OnboardingProfile {
+  userId: string;
+  sector?: string;
+  stage?: string;
+  primaryGoal?: string;
+  budgetBand?: string;
+}
+
+export interface ProfileInput {
+  displayName?: string;
+  sector?: string;
+  stage?: string;
+  primaryGoal?: string;
+  budgetBand?: string;
+}
