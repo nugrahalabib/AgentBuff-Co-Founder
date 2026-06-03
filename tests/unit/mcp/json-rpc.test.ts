@@ -40,6 +40,18 @@ function deps(audit = new InMemoryMcpAuditStore()) {
   return { registry: buildRegistry(), ctx, clientId: "c1", audit, now: () => "2026-06-04T00:00:00.000Z" };
 }
 
+// A context whose project service returns one owned project + state (for resources tests).
+function ctxWithProjects(): McpContext {
+  const project = { id: "p1", ownerUserId: "u1", title: "Kedai Kopi", refs: { documentIds: [] } };
+  return {
+    userId: "u1",
+    projects: {
+      listForUser: async () => [project],
+      getState: async (pid: string) => (pid === "p1" ? { project } : null),
+    },
+  } as unknown as McpContext;
+}
+
 describe("isValidEnvelope", () => {
   it("accepts a well-formed envelope and rejects malformed ones", () => {
     expect(isValidEnvelope({ jsonrpc: "2.0", method: "ping", id: 1 })).toBe(true);
@@ -78,6 +90,53 @@ describe("handleRpc — protocol methods", () => {
   it("a notification (no id) returns null and produces no response", async () => {
     const res = await handleRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, deps());
     expect(res).toBeNull();
+  });
+
+  it("initialize advertises tools + resources + prompts capabilities", async () => {
+    const res = (await handleRpc({ jsonrpc: "2.0", id: 1, method: "initialize" }, deps())) as JsonRpcResponse;
+    const caps = (res.result as { capabilities: Record<string, unknown> }).capabilities;
+    expect(caps).toHaveProperty("tools");
+    expect(caps).toHaveProperty("resources");
+    expect(caps).toHaveProperty("prompts");
+  });
+});
+
+describe("handleRpc — resources + prompts", () => {
+  it("resources/list returns the user's project resources", async () => {
+    const res = (await handleRpc({ jsonrpc: "2.0", id: 1, method: "resources/list" }, { ...deps(), ctx: ctxWithProjects() })) as JsonRpcResponse;
+    const resources = (res.result as { resources: { uri: string }[] }).resources;
+    expect(resources[0]!.uri).toBe("agentbuff://project/p1");
+  });
+
+  it("resources/read returns the project state JSON (ownership enforced)", async () => {
+    const res = (await handleRpc(
+      { jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: "agentbuff://project/p1" } },
+      { ...deps(), ctx: ctxWithProjects() },
+    )) as JsonRpcResponse;
+    const contents = (res.result as { contents: { text: string }[] }).contents;
+    expect(JSON.parse(contents[0]!.text).project.id).toBe("p1");
+  });
+
+  it("resources/read rejects a missing uri", async () => {
+    const res = (await handleRpc({ jsonrpc: "2.0", id: 3, method: "resources/read", params: {} }, deps())) as JsonRpcResponse;
+    expect(res.error?.code).toBe(RPC.INVALID_PARAMS);
+  });
+
+  it("prompts/list + prompts/get return Bahasa templates", async () => {
+    const list = (await handleRpc({ jsonrpc: "2.0", id: 4, method: "prompts/list" }, deps())) as JsonRpcResponse;
+    expect((list.result as { prompts: { name: string }[] }).prompts.length).toBeGreaterThan(0);
+
+    const got = (await handleRpc(
+      { jsonrpc: "2.0", id: 5, method: "prompts/get", params: { name: "validate_business_idea", arguments: { idea: "kedai kopi" } } },
+      deps(),
+    )) as JsonRpcResponse;
+    const messages = (got.result as { messages: { content: { text: string } }[] }).messages;
+    expect(messages[0]!.content.text).toContain("kedai kopi");
+  });
+
+  it("prompts/get rejects an unknown prompt", async () => {
+    const res = (await handleRpc({ jsonrpc: "2.0", id: 6, method: "prompts/get", params: { name: "nope" } }, deps())) as JsonRpcResponse;
+    expect(res.error?.code).toBe(RPC.INVALID_PARAMS);
   });
 });
 

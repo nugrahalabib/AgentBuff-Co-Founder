@@ -9,6 +9,8 @@ import { validateAgainstSchema } from "@/lib/ai/schema-validate";
 import { McpError, type McpContext } from "./types";
 import type { McpToolRegistry } from "./registry";
 import type { McpAuditStore } from "./client-store";
+import { listResources, readResource } from "./resources";
+import { PROMPTS, getPrompt } from "./prompts";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 export const MCP_SERVER_INFO = { name: "agentbuff-cofounder", version: "1.0.0" } as const;
@@ -77,7 +79,11 @@ export async function handleRpc(req: JsonRpcRequest, deps: RpcDeps): Promise<Jso
       case "initialize":
         return ok(id, {
           protocolVersion: MCP_PROTOCOL_VERSION,
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            resources: { listChanged: false, subscribe: false },
+            prompts: { listChanged: false },
+          },
           serverInfo: MCP_SERVER_INFO,
         });
 
@@ -89,6 +95,32 @@ export async function handleRpc(req: JsonRpcRequest, deps: RpcDeps): Promise<Jso
 
       case "tools/call":
         return await handleToolCall(id, req.params, deps);
+
+      case "resources/list":
+        return ok(id, { resources: await listResources(deps.ctx) });
+
+      case "resources/read": {
+        const uri = (req.params as { uri?: unknown } | undefined)?.uri;
+        if (typeof uri !== "string") return err(id, RPC.INVALID_PARAMS, "Parameter `uri` (string) wajib.");
+        try {
+          return ok(id, { contents: [await readResource(deps.ctx, uri)] });
+        } catch (e) {
+          return err(id, RPC.INVALID_PARAMS, e instanceof Error ? e.message : "Resource tidak terbaca.");
+        }
+      }
+
+      case "prompts/list":
+        return ok(id, { prompts: PROMPTS });
+
+      case "prompts/get": {
+        const p = (req.params ?? {}) as { name?: unknown; arguments?: Record<string, string> };
+        if (typeof p.name !== "string") return err(id, RPC.INVALID_PARAMS, "Parameter `name` (string) wajib.");
+        try {
+          return ok(id, { messages: getPrompt(p.name, p.arguments ?? {}) });
+        } catch (e) {
+          return err(id, RPC.INVALID_PARAMS, e instanceof Error ? e.message : "Prompt tidak ditemukan.");
+        }
+      }
 
       default:
         if (isNotification) return null; // unknown notification → ignore silently

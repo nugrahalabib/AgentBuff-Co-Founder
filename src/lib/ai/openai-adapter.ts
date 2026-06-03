@@ -46,8 +46,18 @@ interface OAOutputItem {
   content?: OAContent[];
 }
 interface OAResponse {
+  id?: string;
+  status?: string;
   output?: OAOutputItem[];
   error?: { message?: string } | null;
+}
+
+/** Map a Responses background status onto the PAL deep-research handle status. */
+function mapBgStatus(status: string | undefined): DeepResearchHandle["status"] {
+  if (status === "completed" || status === "succeeded") return "completed";
+  if (status === "failed" || status === "cancelled" || status === "error") return "failed";
+  if (status === "queued") return "queued";
+  return "running";
 }
 
 /** Map the PAL reasoning levels onto Responses API `reasoning.effort`. */
@@ -243,12 +253,40 @@ export class OpenAIAdapter implements LLMProvider {
 
   // --- Later milestones. Verify shapes before implementing. ---
 
-  async runDeepResearch(_cred: Credential, _brief: string, _opts?: { max?: boolean }): Promise<DeepResearchHandle> {
-    // o3-deep-research / o4-mini-deep-research, background=true, >=1 data source. PRD §12.15. Fase 1.
-    throw new OpenAIApiError("Deep Research (o3-deep-research) belum diimplementasikan (Fase 1).", 501, false);
+  async runDeepResearch(cred: Credential, brief: string, _opts?: { max?: boolean }): Promise<DeepResearchHandle> {
+    // o3-deep-research, background=true, with a data source (web_search). Returns an id to poll. §12.15.
+    const model = requireModel("deep_research");
+    const data = await this.responses(cred, { model, input: brief, background: true, tools: [{ type: "web_search" }] });
+    const ref = data.id ?? "";
+    return { reportId: ref, status: mapBgStatus(data.status), providerRef: ref };
   }
-  async pollDeepResearch(_cred: Credential, _handle: DeepResearchHandle): Promise<DeepResearchHandle> {
-    throw new OpenAIApiError("Deep Research polling belum diimplementasikan (Fase 1).", 501, false);
+
+  async pollDeepResearch(cred: Credential, handle: DeepResearchHandle): Promise<DeepResearchHandle> {
+    if (handle.providerRef === undefined || handle.providerRef === "") {
+      throw new OpenAIApiError("providerRef response tidak ada untuk polling.", 400, false);
+    }
+    // GET /v1/responses/{id} to check status + collect output.
+    const data = await withRetry(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${OPENAI_BASE}/responses/${handle.providerRef}`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${cred.secret}` },
+        });
+      } catch {
+        throw new OpenAIApiError("Gagal menghubungi OpenAI Responses API.", 0, true);
+      }
+      if (!res.ok) {
+        const c = classifyValidationStatus(res.status);
+        throw new OpenAIApiError(c.kind === "ok" ? "" : c.detail || `Responses error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
+      }
+      return (await res.json()) as OAResponse;
+    });
+    const status = mapBgStatus(data.status);
+    if (status !== "completed") return { ...handle, status };
+    const { text, annotations } = extractMessage(data);
+    const { citations, sources } = annotationsToCitations(annotations, text);
+    return { ...handle, status, text, citations, sources };
   }
   async generateImage(cred: Credential, prompt: string, opts?: ImageOpts): Promise<{ imageRef: string }> {
     // gpt-image via the Image API → base64 → data URL. Requires Org Verification on the user's account
@@ -279,16 +317,34 @@ export class OpenAIAdapter implements LLMProvider {
       return { imageRef: `data:image/png;base64,${b64}` };
     });
   }
-  async understandImage<T = unknown>(
-    _cred: Credential,
-    _imageRef: string,
-    _prompt: string,
-    _jsonSchema?: object,
-  ): Promise<T> {
-    throw new OpenAIApiError("Vision/OCR belum diimplementasikan (Fase 2).", 501, false);
+  async understandImage<T = unknown>(cred: Credential, imageRef: string, prompt: string, jsonSchema?: object): Promise<T> {
+    const content = [
+      { type: "input_text", text: prompt },
+      { type: "input_image", image_url: imageRef },
+    ];
+    return this.understandContent<T>(cred, content, "vision", jsonSchema);
   }
-  async understandDocument<T = unknown>(_cred: Credential, _fileRef: string, _jsonSchema: object): Promise<T> {
-    // input_file / file_search + vector store. PRD §9.3.4.1, §12.15. Fase 1.
-    throw new OpenAIApiError("Document Understanding belum diimplementasikan (Fase 1).", 501, false);
+
+  async understandDocument<T = unknown>(cred: Credential, fileRef: string, jsonSchema: object): Promise<T> {
+    // input_file accepts a data URL (filename + file_data) for PDFs/images. PRD §9.3.4.1, §12.15.
+    const content = [
+      { type: "input_text", text: "Ekstrak field terstruktur dari dokumen ini sesuai schema; jangan mengarang." },
+      { type: "input_file", filename: "dokumen", file_data: fileRef },
+    ];
+    return this.understandContent<T>(cred, content, "doc_understanding", jsonSchema);
+  }
+
+  /** Shared vision/doc path over the Responses API with multimodal input + optional structured output. */
+  private async understandContent<T>(cred: Credential, content: unknown[], task: TaskClass, jsonSchema?: object): Promise<T> {
+    const model = requireModel(task);
+    const body: Record<string, unknown> = { model, input: [{ role: "user", content }] };
+    if (jsonSchema !== undefined) {
+      body["text"] = { format: { type: "json_schema", name: "structured_output", strict: true, schema: jsonSchema } };
+    }
+    const { text } = extractMessage(await this.responses(cred, body));
+    if (jsonSchema === undefined) return text as unknown as T;
+    const r = parseAndValidate<T>(text, jsonSchema);
+    if (!r.ok) throw new OpenAIApiError(`Output tidak valid terhadap schema (${r.errors}).`, 200, false);
+    return r.value;
   }
 }

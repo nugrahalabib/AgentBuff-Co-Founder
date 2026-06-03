@@ -185,6 +185,51 @@ describe("GeminiAdapter.groundedSearch", () => {
   });
 });
 
+describe("GeminiAdapter.runDeepResearch / pollDeepResearch (Interactions API)", () => {
+  it("creates a background interaction and returns a pollable handle (Api-Revision header sent)", async () => {
+    const fn = stubFetch(fakeResponse(200, { id: "int-1", status: "queued" }));
+    const handle = await new GeminiAdapter().runDeepResearch(cred, "Riset pasar kopi");
+    expect(handle.providerRef).toBe("int-1");
+    expect(handle.status).toBe("queued");
+    expect((fn.mock.calls[0]![0] as string)).toContain("/interactions");
+    expect(requestHeaders(fn)["Api-Revision"]).toBeDefined();
+  });
+
+  it("polls and returns the completed report with text + citations", async () => {
+    stubFetch(
+      fakeResponse(200, {
+        id: "int-1",
+        status: "completed",
+        output_text: "Pasar kopi tumbuh.",
+        candidates: [
+          {
+            content: { parts: [{ text: "Pasar kopi tumbuh." }] },
+            groundingMetadata: {
+              groundingChunks: [{ web: { uri: "https://x.id", title: "x" } }],
+              groundingSupports: [{ segment: { startIndex: 0, endIndex: 5, text: "Pasar" }, groundingChunkIndices: [0] }],
+            },
+          },
+        ],
+      }),
+    );
+    const done = await new GeminiAdapter().pollDeepResearch(cred, { reportId: "int-1", status: "running", providerRef: "int-1" });
+    expect(done.status).toBe("completed");
+    expect(done.text).toBe("Pasar kopi tumbuh.");
+    expect(done.citations?.[0]?.sourceUrl).toBe("https://x.id");
+  });
+});
+
+describe("GeminiAdapter.understandImage / understandDocument", () => {
+  it("inlines a data-URL image + prompt and parses structured output", async () => {
+    stubFetch(fakeResponse(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }));
+    const out = await new GeminiAdapter().understandImage<{ a: number }>(cred, "data:image/png;base64,QUJD", "baca", { type: "object" });
+    expect(out).toEqual({ a: 1 });
+  });
+  it("rejects a non-data-URL source", async () => {
+    await expect(new GeminiAdapter().understandImage(cred, "https://x.id/a.png", "baca")).rejects.toThrow(/data URL/i);
+  });
+});
+
 describe("pure helpers", () => {
   it("mapThinkingLevel collapses to Gemini 3 levels", () => {
     expect(mapThinkingLevel("minimal")).toBe("low");

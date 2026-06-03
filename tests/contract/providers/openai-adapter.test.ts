@@ -169,6 +169,48 @@ describe("OpenAIAdapter.groundedSearch", () => {
   });
 });
 
+describe("OpenAIAdapter.runDeepResearch / pollDeepResearch (Responses background)", () => {
+  it("creates a background response and returns a pollable handle", async () => {
+    const fn = stubFetch(fakeResponse(200, { id: "resp-1", status: "queued" }));
+    const handle = await new OpenAIAdapter().runDeepResearch(cred, "Riset pasar kopi");
+    expect(handle.providerRef).toBe("resp-1");
+    expect(handle.status).toBe("queued");
+    const body = requestBody(fn);
+    expect(body["background"]).toBe(true);
+    expect(body["tools"]).toEqual([{ type: "web_search" }]);
+  });
+
+  it("polls GET /responses/{id} and returns the completed report with citations", async () => {
+    const fn = stubFetch(
+      fakeResponse(
+        200,
+        {
+          id: "resp-1",
+          status: "completed",
+          output: [
+            { type: "message", content: [{ type: "output_text", text: "Spain won.", annotations: [{ type: "url_citation", url: "https://uefa.com", title: "uefa", start_index: 0, end_index: 5 }] }] },
+          ],
+        },
+      ),
+    );
+    const done = await new OpenAIAdapter().pollDeepResearch(cred, { reportId: "resp-1", status: "running", providerRef: "resp-1" });
+    expect(done.status).toBe("completed");
+    expect(done.text).toBe("Spain won.");
+    expect(done.citations?.[0]?.sourceUrl).toBe("https://uefa.com");
+    expect((fn.mock.calls[0]![0] as string)).toContain("/responses/resp-1");
+  });
+});
+
+describe("OpenAIAdapter.understandImage", () => {
+  it("sends multimodal input to the Responses API and parses structured output", async () => {
+    const fn = stubFetch(fakeResponse(200, message([{ type: "output_text", text: '{"a":1}', annotations: [] }])));
+    const out = await new OpenAIAdapter().understandImage<{ a: number }>(cred, "data:image/png;base64,QUJD", "baca", { type: "object" });
+    expect(out).toEqual({ a: 1 });
+    const input = (requestBody(fn)["input"] as { content: { type: string }[] }[])[0]!.content;
+    expect(input.some((c) => c.type === "input_image")).toBe(true);
+  });
+});
+
 describe("pure helpers", () => {
   it("mapReasoningEffort collapses to low/medium/high", () => {
     expect(mapReasoningEffort("minimal")).toBe("low");

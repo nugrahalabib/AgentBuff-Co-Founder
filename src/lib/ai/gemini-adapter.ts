@@ -69,6 +69,34 @@ interface GenerateContentResponse {
   promptFeedback?: { blockReason?: string };
 }
 
+/** Interactions API response (Deep Research). Preview shape — read defensively. PRD §12.8. */
+interface InteractionResponse {
+  id?: string;
+  name?: string;
+  status?: string;
+  output_text?: string;
+  error?: { message?: string };
+  candidates?: GeminiCandidate[];
+}
+
+/** Map an Interactions/Responses status string onto the PAL handle status. */
+export function mapInteractionStatus(status: string | undefined): DeepResearchHandle["status"] {
+  switch (status) {
+    case "completed":
+    case "succeeded":
+      return "completed";
+    case "failed":
+    case "cancelled":
+    case "error":
+      return "failed";
+    case "queued":
+    case "pending":
+      return "queued";
+    default:
+      return "running";
+  }
+}
+
 /** Map the PAL reasoning levels onto Gemini 3 `thinkingLevel`. PRD §12.4. */
 export function mapThinkingLevel(reasoning: NonNullable<StructuredOpts["reasoning"]>): "low" | "high" {
   return reasoning === "minimal" || reasoning === "low" ? "low" : "high";
@@ -263,12 +291,51 @@ export class GeminiAdapter implements LLMProvider {
 
   // --- Later milestones (Interactions API / Nano Banana / Files API). Verify shapes before implementing. ---
 
-  async runDeepResearch(_cred: Credential, _brief: string, _opts?: { max?: boolean }): Promise<DeepResearchHandle> {
-    // Interactions API (`/v1beta/interactions`, Api-Revision header, background=true, then poll). PRD §12.8. Fase 1.
-    throw new GeminiApiError("Deep Research (Interactions API) belum diimplementasikan (Fase 1).", 501, false);
+  /** Interactions API call (Deep Research agent). Background create + poll. PRD §12.8. */
+  private async interactions(cred: Credential, method: "POST" | "GET", path: string, body?: Record<string, unknown>): Promise<InteractionResponse> {
+    const apiRevision = process.env.GEMINI_API_REVISION ?? "2026-05-20"; // VERIFY against docs before prod (§12.13)
+    return withRetry(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${GEMINI_BASE}/interactions${path}`, {
+          method,
+          headers: { "Content-Type": "application/json", "x-goog-api-key": cred.secret, "Api-Revision": apiRevision },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+      } catch {
+        throw new GeminiApiError("Gagal menghubungi Gemini Interactions API.", 0, true);
+      }
+      if (!res.ok) {
+        const c = classifyValidationStatus(res.status);
+        throw new GeminiApiError(c.kind === "ok" ? "" : c.detail || `Interactions error ${res.status}.`, res.status, res.status >= 500 || res.status === 429);
+      }
+      return (await res.json()) as InteractionResponse;
+    });
   }
-  async pollDeepResearch(_cred: Credential, _handle: DeepResearchHandle): Promise<DeepResearchHandle> {
-    throw new GeminiApiError("Deep Research polling belum diimplementasikan (Fase 1).", 501, false);
+
+  async runDeepResearch(cred: Credential, brief: string, opts?: { max?: boolean }): Promise<DeepResearchHandle> {
+    // Pick the comprehensive agent when max=true; default to the faster preview agent. §9.2.5 Jalur A.
+    const agent = resolveModel("deep_research", "gemini");
+    const body: Record<string, unknown> = {
+      agent: opts?.max === true ? `${agent}-max` : agent,
+      input: brief,
+      background: true,
+      agent_config: { thinking_summaries: "auto" },
+    };
+    const data = await this.interactions(cred, "POST", "", body);
+    const ref = data.id ?? data.name ?? "";
+    return { reportId: ref, status: mapInteractionStatus(data.status), providerRef: ref };
+  }
+
+  async pollDeepResearch(cred: Credential, handle: DeepResearchHandle): Promise<DeepResearchHandle> {
+    if (handle.providerRef === undefined || handle.providerRef === "") {
+      throw new GeminiApiError("providerRef interaction tidak ada untuk polling.", 400, false);
+    }
+    const data = await this.interactions(cred, "GET", `/${handle.providerRef}`, undefined);
+    const status = mapInteractionStatus(data.status);
+    if (status !== "completed") return { ...handle, status };
+    const { citations, sources } = groundingToCitations(data.candidates?.[0]?.groundingMetadata);
+    return { ...handle, status, text: data.output_text ?? extractText(data as GenerateContentResponse), citations, sources };
   }
   async generateImage(cred: Credential, prompt: string, _opts?: ImageOpts): Promise<{ imageRef: string }> {
     // Nano Banana (image model) via generateContent → inline image bytes. PRD §9.4, §12.10.
@@ -286,16 +353,44 @@ export class GeminiAdapter implements LLMProvider {
     }
     return { imageRef: `data:${inline.mimeType ?? "image/png"};base64,${inline.data}` };
   }
-  async understandImage<T = unknown>(
-    _cred: Credential,
-    _imageRef: string,
-    _prompt: string,
-    _jsonSchema?: object,
-  ): Promise<T> {
-    throw new GeminiApiError("Vision/OCR belum diimplementasikan (Fase 2).", 501, false);
+  async understandImage<T = unknown>(cred: Credential, imageRef: string, prompt: string, jsonSchema?: object): Promise<T> {
+    return this.understandInline<T>(cred, imageRef, prompt, "vision", jsonSchema);
   }
-  async understandDocument<T = unknown>(_cred: Credential, _fileRef: string, _jsonSchema: object): Promise<T> {
-    // Document Understanding (vision over PDF, Files API for large). PRD §9.3.4.1, §12.11. Fase 1.
-    throw new GeminiApiError("Document Understanding belum diimplementasikan (Fase 1).", 501, false);
+
+  async understandDocument<T = unknown>(cred: Credential, fileRef: string, jsonSchema: object): Promise<T> {
+    // Document Understanding (vision over PDF/image). PRD §9.3.4.1, §12.11.
+    return this.understandInline<T>(
+      cred,
+      fileRef,
+      "Ekstrak field terstruktur dari dokumen ini sesuai schema. Jangan mengarang nilai yang tak terbaca.",
+      "doc_understanding",
+      jsonSchema,
+    );
   }
+
+  /** Shared vision/doc path: inline the (data-URL) bytes + prompt → optional structured output. */
+  private async understandInline<T>(cred: Credential, ref: string, prompt: string, task: TaskClass, jsonSchema?: object): Promise<T> {
+    const inline = parseInlineData(ref);
+    if (inline === null) {
+      throw new GeminiApiError("Sumber harus berupa data URL (data:<mime>;base64,...).", 400, false);
+    }
+    const model = requireModel(task);
+    const generationConfig: Record<string, unknown> | undefined =
+      jsonSchema !== undefined ? { responseMimeType: "application/json", responseSchema: jsonSchema } : undefined;
+    const body: Record<string, unknown> = {
+      contents: [{ role: "user", parts: [{ inlineData: inline }, { text: prompt }] }],
+    };
+    if (generationConfig !== undefined) body["generationConfig"] = generationConfig;
+    const text = extractText(await this.generateContent(cred, model, body));
+    if (jsonSchema === undefined) return text as unknown as T;
+    const r = parseAndValidate<T>(text, jsonSchema);
+    if (!r.ok) throw new GeminiApiError(`Output tidak valid terhadap schema (${r.errors}).`, 200, false);
+    return r.value;
+  }
+}
+
+/** Parse a `data:<mime>;base64,<data>` URL into Gemini inlineData. Returns null if not a data URL. */
+function parseInlineData(ref: string): { mimeType: string; data: string } | null {
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(ref);
+  return m === null ? null : { mimeType: m[1]!, data: m[2]! };
 }
