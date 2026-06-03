@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/ui/button";
 import { CashFlowChart } from "@/ui/cash-flow-chart";
-import type { BusinessPlan, ResearchReport } from "@/server/domain/types";
+import type { BusinessDocument, BusinessPlan, DocumentType, ResearchReport } from "@/server/domain/types";
 import type { FinancialInputs, ScenarioKpis, ScenarioSummarySet } from "@/server/engine/financial/index";
 
 const idr = (n: number) =>
@@ -62,17 +62,20 @@ export function ProjectClient({
   ideaText,
   initialResearch,
   initialPlan,
+  initialDocuments,
 }: {
   projectId: string;
   title: string;
   ideaText: string;
   initialResearch: ResearchReport | null;
   initialPlan: BusinessPlan | null;
+  initialDocuments: BusinessDocument[];
 }) {
   const [research, setResearch] = useState<ResearchReport | null>(initialResearch);
   const [plan, setPlan] = useState<BusinessPlan | null>(initialPlan);
+  const [documents, setDocuments] = useState<BusinessDocument[]>(initialDocuments);
   const [form, setForm] = useState<PlanForm>(PLAN_DEFAULTS);
-  const [busy, setBusy] = useState<"validate" | "plan" | null>(null);
+  const [busy, setBusy] = useState<"validate" | "plan" | "proposal" | "pitch_deck" | null>(null);
   const [error, setError] = useState("");
   const [stages, setStages] = useState<Record<string, "start" | "done">>({});
 
@@ -148,6 +151,25 @@ export function ProjectClient({
       const data = (await res.json()) as { plan?: BusinessPlan; error?: string };
       if (!res.ok || data.plan === undefined) setError(data.error ?? "Gagal menyusun plan.");
       else setPlan(data.plan);
+    } catch {
+      setError("Tidak bisa menghubungi server.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function generateDoc(type: DocumentType) {
+    setBusy(type);
+    setError("");
+    try {
+      const res = await fetch(`/api/projects/${projectId}/docs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const data = (await res.json()) as { document?: BusinessDocument; error?: string };
+      if (!res.ok || data.document === undefined) setError(data.error ?? "Gagal menyusun dokumen.");
+      else setDocuments((prev) => [data.document!, ...prev.filter((d) => d.type !== type)]);
     } catch {
       setError("Tidak bisa menghubungi server.");
     } finally {
@@ -251,6 +273,46 @@ export function ProjectClient({
               maupun nasihat finansial profesional. Narasi disusun AI dengan angka yang sama (tidak mengarang angka).
             </p>
           </div>
+        )}
+      </section>
+
+      {/* Deck & Docs */}
+      <section className="rounded-card border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold">3 · Deck &amp; Docs</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Proposal A4 &amp; pitch deck 16:9 — teks disusun AI, semua angka diikat dari engine. Buka lalu &ldquo;Cetak /
+          Simpan PDF&rdquo;.
+        </p>
+        {plan === null && (
+          <p className="mt-2 text-xs text-warning">Susun Business Plan dulu agar dokumen punya angka untuk diikat.</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button onClick={() => void generateDoc("proposal")} disabled={busy !== null || plan === null} size="md">
+            {busy === "proposal" ? "Menyusun…" : "Buat Proposal"}
+          </Button>
+          <Button onClick={() => void generateDoc("pitch_deck")} disabled={busy !== null || plan === null} variant="secondary" size="md">
+            {busy === "pitch_deck" ? "Menyusun…" : "Buat Pitch Deck"}
+          </Button>
+        </div>
+        {documents.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {documents.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{d.title}</p>
+                  <p className="text-xs text-muted-foreground">{d.type === "proposal" ? "Proposal A4" : "Pitch Deck 16:9"}</p>
+                </div>
+                <a
+                  href={`/api/projects/${projectId}/docs/${d.id}/view`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90"
+                >
+                  Buka &amp; Cetak ↗
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </div>

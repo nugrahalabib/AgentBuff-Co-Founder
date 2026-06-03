@@ -133,11 +133,63 @@ export interface BusinessPlan {
   generatedAt: string;
 }
 
+// --- Deck & Docs (PRD §9.5). Template-Constrained Generation: the LLM fills TEXT slots only; the
+//     server renders the HTML and binds every number from the deterministic Financial Engine. ---
+export type DocumentType = "proposal" | "pitch_deck";
+
+export interface ProposalSlots {
+  tagline: string;
+  problem: string;
+  solution: string;
+  marketAnalysis: string;
+  businessModel: string;
+  marketingPlan: string;
+  team: string;
+  financialHighlights: string;
+  fundingAsk: string;
+  closing: string;
+}
+export interface DeckSlide {
+  title: string;
+  bullets: string[];
+}
+export interface PitchDeckSlots {
+  slides: DeckSlide[];
+}
+
+/** Numbers bound from the plan's deterministic financials — never authored by the LLM. PRD §9.5.2.1. */
+export interface BoundFinancials {
+  contributionMarginPerUnit: number;
+  grossMarginPct: number;
+  bepUnitsPerMonth: number | null;
+  startupCapital: number;
+  paybackMonths: number | null;
+  roiPct: number;
+}
+
+export interface BusinessDocument {
+  id: string;
+  projectId: string;
+  type: DocumentType;
+  status: "draft" | "complete";
+  version: number;
+  title: string;
+  /** Filled text slots (ProposalSlots for a proposal, PitchDeckSlots for a deck). */
+  slots: ProposalSlots | PitchDeckSlots;
+  boundFinancials: BoundFinancials;
+  /** Carried from research so source chips remain clickable in the doc. */
+  sources?: SourceRef[];
+  theme?: string;
+  stale: boolean;
+  generatedAt: string;
+}
+
 /** Read-only composite for MCP `get_project` and downstream context binding. PRD §11.2. */
 export interface ProjectState {
   project: Project;
   research?: ResearchReport;
   plan?: BusinessPlan;
+  documents?: BusinessDocument[];
 }
 
 /** Onboarding profile — the "data diri / bisnis" we collect to personalize. PRD §9.1.5, §11. */

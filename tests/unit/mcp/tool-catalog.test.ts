@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { buildToolRegistry } from "../../../src/server/mcp/build-registry";
 import type { McpContext } from "../../../src/server/mcp/types";
 import { InMemoryRepository } from "../../../src/server/domain/repositories";
-import type { BusinessPlan, Project, ResearchReport } from "../../../src/server/domain/types";
+import type { BusinessDocument, BusinessPlan, Project, ResearchReport } from "../../../src/server/domain/types";
 import { ProjectService } from "../../../src/server/services/project-service";
 import { ResearchService } from "../../../src/server/services/research-service";
 import { PlannerService } from "../../../src/server/services/planner-service";
+import { DocsService } from "../../../src/server/services/docs-service";
 import { assembleSignals, computeValidationScore } from "../../../src/server/engine/research/index";
 import type { FinancialInputs } from "../../../src/server/engine/financial/index";
 import type { LLMProvider, ProviderRegistry } from "../../../src/lib/ai/llm-provider";
@@ -28,6 +29,11 @@ const PLAN_NARRATIVE = {
   execSummary: "e", businessDesc: "b", marketAnalysis: "m", marketingStrategy: "ms",
   operations: "o", roadmap: "rd", risks: "rk", closing: "c",
 };
+const PROPOSAL_SLOTS = {
+  tagline: "t", problem: "p", solution: "s", marketAnalysis: "m", businessModel: "bm",
+  marketingPlan: "mp", team: "tm", financialHighlights: "fh", fundingAsk: "fa", closing: "c",
+};
+const DECK_SLOTS = { slides: [{ title: "Cover", bullets: ["a", "b"] }] };
 /** The deterministic score the engine derives from EXTRACTION (LLM never returns the score). */
 const EXPECTED_SCORE = computeValidationScore(
   assembleSignals({ demandSignalCount: 1, trend: "rising", priceMedian: 20000, costEstimate: 8000, competitorCount: 1, differentiation: 0.5, risks: [] }),
@@ -51,15 +57,18 @@ function makeWorld() {
   const projectsRepo = new InMemoryRepository<Project>();
   const researchRepo = new InMemoryRepository<ResearchReport>();
   const plansRepo = new InMemoryRepository<BusinessPlan>();
+  const documentsRepo = new InMemoryRepository<BusinessDocument>();
   let pid = 0;
   let rid = 0;
   let plid = 0;
+  let did = 0;
   let nowSeq = 0;
 
   const projects = new ProjectService({
     projects: projectsRepo,
     research: researchRepo,
     plans: plansRepo,
+    documents: documentsRepo,
     idGen: () => `proj-${++pid}`,
     now: () => `t-${++nowSeq}`,
   });
@@ -76,6 +85,8 @@ function makeWorld() {
       if ("product" in props) return NORMALIZE;
       if ("demandSignals" in props) return EXTRACTION;
       if ("recommendationReason" in props) return SYNTHESIS;
+      if ("tagline" in props) return PROPOSAL_SLOTS;
+      if ("slides" in props) return DECK_SLOTS;
       return PLAN_NARRATIVE; // plan narrative schema
     }),
   } as unknown as LLMProvider;
@@ -84,9 +95,10 @@ function makeWorld() {
 
   const research = new ResearchService({ reports: researchRepo, registry, idGen: () => `rep-${++rid}`, now: () => `t-${++nowSeq}` });
   const planner = new PlannerService({ plans: plansRepo, registry, idGen: () => `plan-${++plid}`, now: () => `t-${++nowSeq}` });
+  const docs = new DocsService({ documents: documentsRepo, registry, idGen: () => `doc-${++did}`, now: () => `t-${++nowSeq}` });
 
   const tools = buildToolRegistry();
-  const ctxFor = (userId: string): McpContext => ({ userId, projects, research, planner });
+  const ctxFor = (userId: string): McpContext => ({ userId, projects, research, planner, docs });
   return { tools, ctxFor };
 }
 
@@ -101,6 +113,7 @@ describe("MCP tool catalog", () => {
       "agentbuff.calculate_financials",
       "agentbuff.compute_scenarios",
       "agentbuff.validate_idea",
+      "agentbuff.generate_document",
       "agentbuff.generate_business_plan",
     ]);
   });
@@ -143,14 +156,24 @@ describe("MCP tool catalog", () => {
     expect(planned.plan_id).toBe("plan-1");
     expect(planned.financials.unitEconomics.contributionMarginPerUnit).toBe(10_000); // from engine, not LLM
 
+    const doc = (await tools.call(
+      "agentbuff.generate_document",
+      { project_id: "proj-1", type: "proposal" },
+      ctx,
+    )) as { document_id: string; type: string; title: string };
+    expect(doc.document_id).toBe("doc-1");
+    expect(doc.type).toBe("proposal");
+
     const state = (await tools.call("agentbuff.get_project", { project_id: "proj-1" }, ctx)) as {
       research?: { id: string };
       plan?: { id: string };
+      documents?: { id: string }[];
       project: { status: string };
     };
     expect(state.research?.id).toBe("rep-1");
     expect(state.plan?.id).toBe("plan-1");
-    expect(state.project.status).toBe("branding"); // advanced through the journey
+    expect(state.documents?.[0]?.id).toBe("doc-1");
+    expect(state.project.status).toBe("complete"); // advanced to the end of the journey
   });
 
   it("calculate_financials is deterministic and needs no LLM", async () => {

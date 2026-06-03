@@ -5,7 +5,19 @@
 
 import { Prisma } from "@prisma/client";
 import type { Repository } from "@/server/domain/repositories";
-import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ProjectStatus, ResearchReport } from "@/server/domain/types";
+import type {
+  BoundFinancials,
+  BusinessDocument,
+  BusinessPlan,
+  OnboardingProfile,
+  PitchDeckSlots,
+  ProfileInput,
+  Project,
+  ProjectStatus,
+  ProposalSlots,
+  ResearchReport,
+  SourceRef,
+} from "@/server/domain/types";
 import type { CredentialMetaPatch, StoredCredential, UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import type {
   McpAuditEntry,
@@ -182,6 +194,59 @@ class PrismaPlanRepository implements Repository<BusinessPlan> {
   }
   async list(): Promise<BusinessPlan[]> {
     return [];
+  }
+}
+
+// ---------- Document (many per project) ----------
+interface DocContent {
+  title: string;
+  slots: ProposalSlots | PitchDeckSlots;
+  boundFinancials: BoundFinancials;
+  sources?: SourceRef[];
+}
+class PrismaDocumentRepository implements Repository<BusinessDocument> {
+  async get(id: string): Promise<BusinessDocument | null> {
+    const row = await prisma.document.findUnique({ where: { id } });
+    if (row === null) return null;
+    const c = row.contentJson as unknown as DocContent;
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      type: row.type as BusinessDocument["type"],
+      status: (row.renderStatus as BusinessDocument["status"]) ?? "complete",
+      version: row.version,
+      title: c.title,
+      slots: c.slots,
+      boundFinancials: c.boundFinancials,
+      sources: c.sources,
+      theme: row.theme ?? undefined,
+      stale: row.stale,
+      generatedAt: row.generatedAt.toISOString(),
+    };
+  }
+  async save(d: BusinessDocument): Promise<BusinessDocument> {
+    const content: DocContent = { title: d.title, slots: d.slots, boundFinancials: d.boundFinancials, sources: d.sources };
+    const fields = {
+      type: d.type as Prisma.DocumentCreateInput["type"],
+      theme: d.theme ?? null,
+      contentJson: json(content),
+      renderStatus: d.status,
+      stale: d.stale,
+      version: d.version,
+      generatedAt: new Date(d.generatedAt),
+    };
+    await prisma.document.upsert({
+      where: { id: d.id },
+      create: { id: d.id, project: { connect: { id: d.projectId } }, ...fields },
+      update: fields,
+    });
+    return d;
+  }
+  async list(filter?: (d: BusinessDocument) => boolean): Promise<BusinessDocument[]> {
+    const rows = await prisma.document.findMany({ orderBy: { generatedAt: "desc" } });
+    const all = await Promise.all(rows.map((r) => this.get(r.id)));
+    const docs = all.filter((d): d is BusinessDocument => d !== null);
+    return filter === undefined ? docs : docs.filter(filter);
   }
 }
 
@@ -382,6 +447,7 @@ export interface PrismaPersistence {
   projects: PrismaProjectRepository;
   reports: PrismaResearchRepository;
   plans: PrismaPlanRepository;
+  documents: PrismaDocumentRepository;
   credentials: PrismaCredentialStore;
   mcpClients: PrismaMcpClientStore;
   mcpAudit: PrismaMcpAuditStore;
@@ -395,6 +461,7 @@ export function createPrismaPersistence(): PrismaPersistence {
     projects: new PrismaProjectRepository(),
     reports: new PrismaResearchRepository(),
     plans: new PrismaPlanRepository(),
+    documents: new PrismaDocumentRepository(),
     credentials: new PrismaCredentialStore(),
     mcpClients: new PrismaMcpClientStore(),
     mcpAudit: new PrismaMcpAuditStore(),

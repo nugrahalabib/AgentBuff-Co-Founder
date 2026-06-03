@@ -3,12 +3,13 @@
 // service is deterministic in tests. PRD §8 (guided journey), §11.2.
 
 import type { Repository } from "../domain/repositories";
-import type { Project, ProjectState, ResearchReport, BusinessPlan } from "../domain/types";
+import type { Project, ProjectState, ResearchReport, BusinessPlan, BusinessDocument } from "../domain/types";
 
 export interface ProjectServiceDeps {
   projects: Repository<Project>;
   research?: Repository<ResearchReport>;
   plans?: Repository<BusinessPlan>;
+  documents?: Repository<BusinessDocument>;
   idGen: () => string;
   now: () => string;
 }
@@ -72,6 +73,11 @@ export class ProjectService {
     if (project.refs.businessPlanId !== undefined && this.deps.plans !== undefined) {
       state.plan = (await this.deps.plans.get(project.refs.businessPlanId)) ?? undefined;
     }
+    if (project.refs.documentIds.length > 0 && this.deps.documents !== undefined) {
+      const docs = await Promise.all(project.refs.documentIds.map((d) => this.deps.documents!.get(d)));
+      const found = docs.filter((d): d is NonNullable<typeof d> => d !== null);
+      if (found.length > 0) state.documents = found;
+    }
     return state;
   }
 
@@ -99,7 +105,14 @@ export class ProjectService {
   async attachPlan(projectId: string, planId: string): Promise<Project> {
     return this.update(projectId, (p) => {
       p.refs.businessPlanId = planId;
-      p.status = "branding";
+      if (p.status === "draft" || p.status === "researching" || p.status === "planning") p.status = "branding";
+    });
+  }
+
+  async attachDocument(projectId: string, documentId: string): Promise<Project> {
+    return this.update(projectId, (p) => {
+      if (!p.refs.documentIds.includes(documentId)) p.refs.documentIds.push(documentId);
+      p.status = "complete";
     });
   }
 

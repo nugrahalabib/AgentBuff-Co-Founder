@@ -24,6 +24,7 @@ export default async function ProjectPage(props: { params: Promise<{ id: string 
           ideaText={state.project.ideaText}
           initialResearch={state.research ?? null}
           initialPlan={state.plan ?? null}
+          initialDocuments={state.documents ?? []}
         />
       </main>
     </div>

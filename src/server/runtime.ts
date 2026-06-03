@@ -9,10 +9,11 @@ import { LocalMasterKey } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
 import { InMemoryRepository, type Repository } from "@/server/domain/repositories";
-import type { BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
+import type { BusinessDocument, BusinessPlan, OnboardingProfile, ProfileInput, Project, ResearchReport } from "@/server/domain/types";
 import { ProjectService } from "@/server/services/project-service";
 import { ResearchService } from "@/server/services/research-service";
 import { PlannerService } from "@/server/services/planner-service";
+import { DocsService } from "@/server/services/docs-service";
 import { CredentialService } from "@/server/services/credential-service";
 import { buildToolRegistry } from "@/server/mcp/build-registry";
 import type { McpToolRegistry } from "@/server/mcp/registry";
@@ -34,12 +35,14 @@ export interface AppRuntime {
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
+  docs: DocsService;
   mcp: McpToolRegistry;
   mcpGateway: McpGatewayService;
   repos: {
     projects: Repository<Project>;
     reports: Repository<ResearchReport>;
     plans: Repository<BusinessPlan>;
+    documents: Repository<BusinessDocument>;
   };
   /** Ensure the (guest) User row exists before creating FK-constrained rows. No-op in memory mode. */
   ensureUser: (userId: string) => Promise<void>;
@@ -58,6 +61,7 @@ function createRuntime(): AppRuntime {
   let projectsRepo: Repository<Project>;
   let reportsRepo: Repository<ResearchReport>;
   let plansRepo: Repository<BusinessPlan>;
+  let documentsRepo: Repository<BusinessDocument>;
   let mcpClients: McpClientStore;
   let mcpAudit: McpAuditStore;
   let ensureUser: (userId: string) => Promise<void>;
@@ -70,6 +74,7 @@ function createRuntime(): AppRuntime {
     projectsRepo = p.projects;
     reportsRepo = p.reports;
     plansRepo = p.plans;
+    documentsRepo = p.documents;
     mcpClients = p.mcpClients;
     mcpAudit = p.mcpAudit;
     ensureUser = p.ensureUser;
@@ -80,6 +85,7 @@ function createRuntime(): AppRuntime {
     projectsRepo = new InMemoryRepository<Project>();
     reportsRepo = new InMemoryRepository<ResearchReport>();
     plansRepo = new InMemoryRepository<BusinessPlan>();
+    documentsRepo = new InMemoryRepository<BusinessDocument>();
     mcpClients = new InMemoryMcpClientStore();
     mcpAudit = new InMemoryMcpAuditStore();
     ensureUser = async () => {};
@@ -101,10 +107,11 @@ function createRuntime(): AppRuntime {
   const now = (): string => new Date().toISOString();
 
   // Hoist services so the MCP gateway shares the SAME instances as the web adapters (headless == UI).
-  const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, idGen, now });
+  const projects = new ProjectService({ projects: projectsRepo, research: reportsRepo, plans: plansRepo, documents: documentsRepo, idGen, now });
   const research = new ResearchService({ reports: reportsRepo, registry, idGen, now });
   const planner = new PlannerService({ plans: plansRepo, registry, idGen, now });
-  const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner }, idGen, now, mcpAudit);
+  const docs = new DocsService({ documents: documentsRepo, registry, idGen, now });
+  const mcpGateway = new McpGatewayService(mcpClients, { projects, research, planner, docs }, idGen, now, mcpAudit);
 
   return {
     master,
@@ -114,9 +121,10 @@ function createRuntime(): AppRuntime {
     projects,
     research,
     planner,
+    docs,
     mcp: buildToolRegistry(),
     mcpGateway,
-    repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo },
+    repos: { projects: projectsRepo, reports: reportsRepo, plans: plansRepo, documents: documentsRepo },
     ensureUser,
     saveProfile,
     getProfile,

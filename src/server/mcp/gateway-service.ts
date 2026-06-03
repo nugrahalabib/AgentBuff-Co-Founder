@@ -5,6 +5,7 @@
 import type { ProjectService } from "../services/project-service";
 import type { ResearchService } from "../services/research-service";
 import type { PlannerService } from "../services/planner-service";
+import type { DocsService } from "../services/docs-service";
 import type { McpAuditStore, McpClientStore, McpClientView } from "./client-store";
 import type { McpContext } from "./types";
 import { generateToken, hashToken } from "./token";
@@ -13,6 +14,7 @@ export interface McpServices {
   projects: ProjectService;
   research: ResearchService;
   planner: PlannerService;
+  docs: DocsService;
 }
 
 export interface AuthenticatedClient {
@@ -69,6 +71,7 @@ export class McpGatewayService {
       projects: this.services.projects,
       research: this.services.research,
       planner: this.services.planner,
+      docs: this.services.docs,
     };
   }
 }

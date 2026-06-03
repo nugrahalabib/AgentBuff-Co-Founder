@@ -104,6 +104,28 @@ export function buildToolRegistry(): McpToolRegistry {
   });
 
   registry.register({
+    name: "agentbuff.generate_document",
+    description: "Susun proposal (A4) atau pitch deck (16:9): slot teks dari LLM, angka diikat dari engine. Simpan ke project.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "type"],
+      properties: {
+        project_id: { type: "string" },
+        type: { type: "string", enum: ["proposal", "pitch_deck"] },
+        theme: { type: "string", enum: ["indigo", "emerald", "amber"] },
+      },
+    },
+    handler: async (input: { project_id: string; type: "proposal" | "pitch_deck"; theme?: string }, ctx) => {
+      const project = await requireOwnedProject(ctx, input.project_id);
+      const state = await ctx.projects.getState(project.id);
+      if (state === null) throw new McpError("NOT_FOUND", "State project tidak ditemukan.");
+      const doc = await ctx.docs.generate(ctx.userId, { projectState: state, type: input.type, theme: input.theme });
+      await ctx.projects.attachDocument(project.id, doc.id);
+      return { document_id: doc.id, type: doc.type, title: doc.title };
+    },
+  });
+
+  registry.register({
     name: "agentbuff.generate_business_plan",
     description: "Susun business plan: angka dari engine deterministik, narasi dari LLM; simpan ke project.",
     inputSchema: {
