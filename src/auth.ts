@@ -10,6 +10,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: authSecret(),
   session: { strategy: "jwt" },
+  logger: {
+    // A session cookie encrypted with a previous AUTH_SECRET can't be decrypted now ("no matching
+    // decryption secret" → JWTSessionError). That's BENIGN: the user is simply treated as logged out
+    // and the next sign-in overwrites the cookie. Don't spam the console/overlay for it; log everything else.
+    error(error) {
+      if (error instanceof Error && error.name === "JWTSessionError") return;
+      console.error(error);
+    },
+  },
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,

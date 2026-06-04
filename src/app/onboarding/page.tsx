@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { auth } from "@/auth";
+import { getServerSession } from "@/server/api-helpers";
 import { GoogleSignInButton } from "@/ui/google-auth";
 import { OnboardingWizard } from "./onboarding-wizard";
 
 export const metadata: Metadata = { title: "Onboarding" };
 
 export default async function OnboardingPage() {
-  const session = await auth();
+  const session = await getServerSession();
   const user = session?.user;
 
   return (

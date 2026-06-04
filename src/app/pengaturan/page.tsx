@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { auth } from "@/auth";
 import { app } from "@/server/runtime";
-import { getServerUserId } from "@/server/api-helpers";
+import { getServerSession, getServerUserId } from "@/server/api-helpers";
 import { AppHeader } from "@/ui/app-header";
 import { GoogleSignInButton, SignOutButton } from "@/ui/google-auth";
 import { KeyManager } from "./key-manager";
@@ -21,7 +20,7 @@ function UsageStat({ label, value }: { label: string; value: number }) {
 }
 
 export default async function SettingsPage() {
-  const session = await auth();
+  const session = await getServerSession();
   const user = session?.user;
   const userId = await getServerUserId();
 

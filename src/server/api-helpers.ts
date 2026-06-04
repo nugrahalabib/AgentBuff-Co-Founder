@@ -5,6 +5,7 @@
 // The framework-level guards (CSRF/rate-limit/body-size) live in http-guards.ts so bearer-token routes
 // can use them without importing the next-auth chain; they are re-exported here for session routes.
 
+import type { Session } from "next-auth";
 import { auth } from "@/auth";
 
 export { isSameOrigin, guardMutation, clientIp, enforceBodyLimit, rateLimit } from "@/server/http-guards";
@@ -28,4 +29,17 @@ export async function currentUserId(_req?: Request): Promise<string | null> {
 /** Acting user for server components (or null when not logged in). */
 export async function getServerUserId(): Promise<string | null> {
   return googleUserId();
+}
+
+/**
+ * Full session for server components, but NEVER throws — a stale/undecryptable cookie (old AUTH_SECRET)
+ * resolves to null (treated as logged out) instead of crashing the page. Use this in server pages that
+ * need `session.user`, rather than calling `auth()` directly.
+ */
+export async function getServerSession(): Promise<Session | null> {
+  try {
+    return await auth();
+  } catch {
+    return null;
+  }
 }
