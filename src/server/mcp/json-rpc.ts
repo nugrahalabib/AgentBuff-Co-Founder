@@ -189,6 +189,9 @@ async function handleToolCall(id: JsonRpcId, params: unknown, deps: RpcDeps): Pr
   }
 }
 
+/** Max JSON-RPC requests in one batch (amplification cap). */
+const MAX_BATCH = 20;
+
 /**
  * Handle a raw request body (already JSON-parsed). Supports a single request or a batch (array).
  * Returns the response payload (object, array, or null for an all-notification batch).
@@ -196,6 +199,9 @@ async function handleToolCall(id: JsonRpcId, params: unknown, deps: RpcDeps): Pr
 export async function dispatch(body: unknown, deps: RpcDeps): Promise<unknown> {
   if (Array.isArray(body)) {
     if (body.length === 0) return err(null, RPC.INVALID_REQUEST, "Batch kosong.");
+    // Cap batch fan-out: one POST must not trigger an unbounded number of concurrent tool executions
+    // (each can call an LLM provider on the user's BYOK quota). (DOS-004)
+    if (body.length > MAX_BATCH) return err(null, RPC.INVALID_REQUEST, `Batch maksimum ${MAX_BATCH} permintaan.`);
     const responses = await Promise.all(
       body.map((item) =>
         isValidEnvelope(item)

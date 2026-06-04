@@ -28,6 +28,12 @@ export interface AuthCodeRecord {
 
 const ALL_SCOPES: McpScope[] = ["read", "write"];
 const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// Bounds for public Dynamic Client Registration (unauthenticated) — keep the in-memory registry from
+// growing without limit and cap per-registration size. Clients re-register cheaply. (RL-001)
+const MAX_CLIENTS = 1000;
+const MAX_REDIRECT_URIS = 5;
+const MAX_CLIENT_NAME_LEN = 120;
+const MAX_REDIRECT_URI_LEN = 2048;
 
 const b64url = (buf: Buffer): string => buf.toString("base64url");
 
@@ -43,15 +49,33 @@ export class OAuthService {
 
   constructor(private readonly nowMs: () => number = () => Date.now()) {}
 
-  /** Dynamic Client Registration (RFC 7591). Returns the new client. */
+  /** Dynamic Client Registration (RFC 7591). Returns the new client. Bounded + capacity-limited. */
   registerClient(input: { clientName?: string; redirectUris: string[] }): OAuthClient {
-    if (input.redirectUris.length === 0 || !input.redirectUris.every(isValidRedirect)) {
-      throw new OAuthError("invalid_redirect_uri", "redirect_uris harus berisi URL absolut yang valid.");
+    const uris = input.redirectUris;
+    if (
+      uris.length === 0 ||
+      uris.length > MAX_REDIRECT_URIS ||
+      !uris.every((u) => typeof u === "string" && u.length <= MAX_REDIRECT_URI_LEN && isValidRedirect(u))
+    ) {
+      throw new OAuthError("invalid_redirect_uri", `redirect_uris harus 1–${MAX_REDIRECT_URIS} URL absolut yang valid.`);
+    }
+    // At capacity, evict the oldest registration (clients re-register cheaply) so an anonymous caller
+    // cannot grow the registry without bound.
+    if (this.clients.size >= MAX_CLIENTS) {
+      let oldestKey: string | undefined;
+      let oldestAt = Infinity;
+      for (const [k, c] of this.clients) {
+        if (c.createdAt < oldestAt) {
+          oldestAt = c.createdAt;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey !== undefined) this.clients.delete(oldestKey);
     }
     const client: OAuthClient = {
       clientId: `mcpc_${b64url(randomBytes(16))}`,
-      clientName: input.clientName?.trim() || "MCP Client",
-      redirectUris: input.redirectUris,
+      clientName: (input.clientName?.trim() || "MCP Client").slice(0, MAX_CLIENT_NAME_LEN),
+      redirectUris: uris,
       createdAt: this.nowMs(),
     };
     this.clients.set(client.clientId, client);
@@ -77,7 +101,11 @@ export class OAuthService {
       throw new OAuthError("invalid_request", "redirect_uri tidak terdaftar untuk client ini.");
     }
     if (input.codeChallenge === "") throw new OAuthError("invalid_request", "PKCE code_challenge wajib (OAuth 2.1).");
-    const method = input.codeChallengeMethod === "plain" ? "plain" : "S256";
+    // OAuth 2.1 requires S256; refuse the downgradable 'plain' method outright. (VAL-007)
+    if (input.codeChallengeMethod !== undefined && input.codeChallengeMethod !== "S256") {
+      throw new OAuthError("invalid_request", "code_challenge_method harus S256 (OAuth 2.1).");
+    }
+    const method = "S256" as const;
     const scopes = (input.scopes ?? ALL_SCOPES).filter((s) => ALL_SCOPES.includes(s));
     const code = `mcpa_${b64url(randomBytes(24))}`;
     this.codes.set(code, {

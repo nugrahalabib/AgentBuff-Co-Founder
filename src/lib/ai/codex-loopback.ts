@@ -12,6 +12,8 @@ import { CODEX_OAUTH } from "./codex-config";
 import { buildAuthorizeUrl, exchangeCode, generatePkce, generateState, type CodexTokenBundle } from "./codex-oauth";
 
 interface PendingLogin {
+  /** The user who initiated this login — only they may consume the resulting session. */
+  userId: string;
   verifier: string;
   status: "pending" | "success" | "error";
   bundle?: CodexTokenBundle;
@@ -26,6 +28,8 @@ interface LoopbackState {
 }
 
 const PENDING_TTL_MS = 10 * 60 * 1000;
+/** Cap concurrent in-flight logins per user so one account can't flood the shared pending map. */
+const MAX_PENDING_PER_USER = 3;
 
 const g = globalThis as unknown as { __codexLoopback?: LoopbackState };
 const state: LoopbackState = g.__codexLoopback ?? (g.__codexLoopback = { server: null, pending: new Map() });
@@ -34,6 +38,19 @@ function sweep(): void {
   const now = Date.now();
   for (const [k, v] of state.pending) {
     if (now - v.createdAt > PENDING_TTL_MS) state.pending.delete(k);
+  }
+  maybeStopServer();
+}
+
+/** Close the loopback listener once nothing is in flight, freeing port 1455 (mirrors 9router's stop). */
+function maybeStopServer(): void {
+  if (state.server !== null && state.pending.size === 0) {
+    try {
+      state.server.close();
+    } catch {
+      /* ignore */
+    }
+    state.server = null;
   }
 }
 
@@ -113,15 +130,21 @@ export interface StartLoginResult {
 }
 
 /**
- * Begin a Codex login: bind the loopback listener (local-only), then return the authorize URL + a
- * loginId the client polls. Throws a friendly error if the loopback can't be bound (e.g. hosted).
+ * Begin a Codex login for `userId`: bind the loopback listener (local-only), then return the authorize
+ * URL + a loginId the client polls. The pending login is bound to userId so only that account can
+ * consume the resulting session. Throws a friendly error if the loopback can't be bound (e.g. hosted)
+ * or if the user already has too many in-flight logins.
  */
-export async function startCodexLogin(): Promise<StartLoginResult> {
-  await ensureServer();
+export async function startCodexLogin(userId: string): Promise<StartLoginResult> {
   sweep();
+  const mine = [...state.pending.values()].filter((p) => p.userId === userId && p.status === "pending").length;
+  if (mine >= MAX_PENDING_PER_USER) {
+    throw new Error("Terlalu banyak percobaan login Codex yang tertunda. Selesaikan atau tunggu sebentar.");
+  }
+  await ensureServer();
   const pkce = generatePkce();
   const st = generateState();
-  state.pending.set(st, { verifier: pkce.verifier, status: "pending", createdAt: Date.now() });
+  state.pending.set(st, { userId, verifier: pkce.verifier, status: "pending", createdAt: Date.now() });
   return { loginId: st, authorizeUrl: buildAuthorizeUrl({ challenge: pkce.challenge, state: st }) };
 }
 
@@ -131,18 +154,19 @@ export interface PollResult {
   bundle?: CodexTokenBundle;
 }
 
-/** Read (without consuming) the status of a pending login. */
-export function pollCodexLogin(loginId: string): PollResult {
+/** Read (without consuming) the status of a pending login. Only the initiating user may read it. */
+export function pollCodexLogin(loginId: string, userId: string): PollResult {
   sweep();
   const p = state.pending.get(loginId);
-  if (p === undefined) return { status: "error", error: "unknown_session" };
+  if (p === undefined || p.userId !== userId) return { status: "error", error: "unknown_session" };
   return { status: p.status, error: p.error, bundle: p.bundle };
 }
 
-/** Consume a completed login (one-time): returns the bundle and deletes the pending entry. */
-export function consumeCodexLogin(loginId: string): CodexTokenBundle | null {
+/** Consume a completed login (one-time): returns the bundle and deletes the entry. User-bound. */
+export function consumeCodexLogin(loginId: string, userId: string): CodexTokenBundle | null {
   const p = state.pending.get(loginId);
-  if (p === undefined || p.status !== "success" || p.bundle === undefined) return null;
+  if (p === undefined || p.userId !== userId || p.status !== "success" || p.bundle === undefined) return null;
   state.pending.delete(loginId);
+  maybeStopServer();
   return p.bundle;
 }

@@ -61,7 +61,7 @@ export interface AppRuntime {
     brandKits: Repository<BrandKit>;
     documents: Repository<BusinessDocument>;
   };
-  /** Ensure the (guest) User row exists before creating FK-constrained rows. No-op in memory mode. */
+  /** Ensure the User row exists before creating FK-constrained rows. No-op in memory mode. */
   ensureUser: (userId: string) => Promise<void>;
   saveProfile: (userId: string, input: ProfileInput) => Promise<void>;
   getProfile: (userId: string) => Promise<OnboardingProfile | null>;

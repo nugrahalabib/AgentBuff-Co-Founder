@@ -1,5 +1,5 @@
 // POST /api/account/delete — UU PDP right to erasure: permanently delete the account + all owned data.
-// Same-origin guarded; requires an explicit { confirm: "HAPUS" } body. Clears the guest session cookie.
+// Same-origin guarded; requires an explicit { confirm: "HAPUS" } body.
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";

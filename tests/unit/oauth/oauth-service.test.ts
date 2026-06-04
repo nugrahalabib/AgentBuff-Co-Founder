@@ -83,3 +83,35 @@ describe("verifyPkce", () => {
     expect(verifyPkce("abc", "xyz", "S256")).toBe(false);
   });
 });
+
+describe("OAuthService — abuse/downgrade hardening", () => {
+  it("rejects code_challenge_method other than S256 (VAL-007: no plain downgrade)", () => {
+    const { svc, client } = world();
+    expect(() =>
+      svc.createAuthCode({
+        clientId: client.clientId, userId: "u1", redirectUri: "https://claude.ai/callback",
+        codeChallenge: challengeFor("v"), codeChallengeMethod: "plain",
+      }),
+    ).toThrow(OAuthError);
+  });
+
+  it("caps the redirect_uris count and rejects an over-long uri (RL-001)", () => {
+    const svc = new OAuthService();
+    expect(() => svc.registerClient({ redirectUris: Array.from({ length: 6 }, (_, i) => `https://a${i}.x/cb`) })).toThrow(OAuthError);
+    expect(() => svc.registerClient({ redirectUris: [`https://x.y/${"a".repeat(3000)}`] })).toThrow(OAuthError);
+  });
+
+  it("truncates an over-long client_name to the bound", () => {
+    const svc = new OAuthService();
+    const c = svc.registerClient({ redirectUris: ["https://x.y/cb"], clientName: "n".repeat(500) });
+    expect(c.clientName.length).toBeLessThanOrEqual(120);
+  });
+
+  it("evicts the oldest registration when the registry hits capacity", () => {
+    let t = 0;
+    const svc = new OAuthService(() => ++t);
+    const first = svc.registerClient({ redirectUris: ["https://x.y/cb"] });
+    for (let i = 0; i < 1000; i++) svc.registerClient({ redirectUris: ["https://x.y/cb"] });
+    expect(svc.getClient(first.clientId)).toBeNull();
+  });
+});

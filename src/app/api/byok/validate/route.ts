@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { GeminiAdapter } from "@/lib/ai/gemini-adapter";
 import { OpenAIAdapter } from "@/lib/ai/openai-adapter";
 import type { Credential } from "@/lib/ai/types";
+import { currentUserId, guardMutation, rateLimit } from "@/server/api-helpers";
 
 const adapters = {
   gemini: () => new GeminiAdapter(),
@@ -15,6 +16,14 @@ const adapters = {
 type ValidatableProvider = keyof typeof adapters;
 
 export async function POST(req: Request): Promise<Response> {
+  // Auth + CSRF + throttle: don't be an open key-validation oracle for arbitrary keys. (BYOK-01, RL-003)
+  const blocked = guardMutation(req);
+  if (blocked !== null) return blocked;
+  const userId = await currentUserId(req);
+  if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
+  const limited = rateLimit(`byok-validate:${userId}`, 10, 60_000);
+  if (limited !== null) return limited;
+
   let body: { provider?: string; apiKey?: string };
   try {
     body = (await req.json()) as { provider?: string; apiKey?: string };

@@ -14,8 +14,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ ref: string }> 
   const { ref } = await ctx.params;
   const obj = await app.storage.get(decodeURIComponent(ref));
   if (obj === null) return new Response("not found", { status: 404 });
-  // Enforce ownership when known; never serve another user's asset.
-  if (obj.ownerUserId !== undefined && obj.ownerUserId !== userId) {
+  // Fail closed: serve ONLY when the recorded owner matches the caller. An object with no owner is
+  // never served (defense-in-depth against a future producer that forgets to stamp the owner). (BYOK-04)
+  if (obj.ownerUserId !== userId) {
     return new Response("forbidden", { status: 403 });
   }
   return new Response(new Uint8Array(obj.data), {

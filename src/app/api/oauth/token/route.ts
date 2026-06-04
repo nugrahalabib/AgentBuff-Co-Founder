@@ -6,21 +6,28 @@
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
 import { OAuthError } from "@/server/oauth/oauth-service";
+import { enforceBodyLimit } from "@/server/http-guards";
 
 export const dynamic = "force-dynamic";
 
+/** Parse params from JSON or form, keeping ONLY string-typed values (VAL-008: reject object/array fields). */
 async function readParams(req: Request): Promise<Record<string, string>> {
   const ct = req.headers.get("content-type") ?? "";
+  const out: Record<string, string> = {};
   if (ct.includes("application/json")) {
-    return (await req.json()) as Record<string, string>;
+    const raw = (await req.json()) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(raw)) if (typeof v === "string") out[k] = v;
+    return out;
   }
   const form = await req.formData();
-  const out: Record<string, string> = {};
   for (const [k, v] of form.entries()) if (typeof v === "string") out[k] = v;
   return out;
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const tooBig = enforceBodyLimit(req, 16 * 1024);
+  if (tooBig !== null) return tooBig;
+
   let p: Record<string, string>;
   try {
     p = await readParams(req);

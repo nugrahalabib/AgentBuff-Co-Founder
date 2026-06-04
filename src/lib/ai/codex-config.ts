@@ -52,3 +52,13 @@ export const CODEX_UNRECOVERABLE_ERRORS = new Set([
   "token_expired",
   "invalid_token",
 ]);
+
+/**
+ * Whether the loopback "Login dengan ChatGPT" flow is offered on this deployment. Enabled by default
+ * (it self-fails on hosted because the bind can't be reached); a hosted operator sets
+ * CODEX_LOGIN_DISABLED=1/true to hide it entirely so the server never attempts the bind. (ENV-006)
+ */
+export function codexLoginEnabled(): boolean {
+  const v = process.env.CODEX_LOGIN_DISABLED;
+  return !(v === "1" || v === "true" || v === "yes");
+}

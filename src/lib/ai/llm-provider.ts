@@ -14,8 +14,8 @@ import type {
 export interface StructuredOpts {
   /** JSON Schema the output MUST conform to (Structured Outputs). PRD §12.15 */
   jsonSchema: object;
-  /** Maps to thinking_level (Gemini) / reasoning.effort (OpenAI). */
-  reasoning?: "minimal" | "low" | "medium" | "high";
+  /** Maps to thinking_level (Gemini) / reasoning.effort (OpenAI ∈ {low,medium,high,xhigh}). */
+  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   systemPrompt?: string;
   /** Task class used for config-driven model routing (model-routing.ts). Defaults to "reasoning_heavy". */
   task?: TaskClass;

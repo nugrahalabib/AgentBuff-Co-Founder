@@ -1,5 +1,5 @@
 // src/lib/ai/gemini-adapter.ts
-// Gemini adapter — implemented against the official Gemini API (verified via context7, 2026-06).
+// Gemini adapter — implemented against the official Gemini API (verified against ai.google.dev, 2026-06-04).
 //   Models list (key validation): GET /v1beta/models            https://ai.google.dev/gemini-api/docs/api-key
 //   Structured Outputs: generateContent + generationConfig.responseMimeType/responseSchema
 //                                                                https://ai.google.dev/gemini-api/docs/structured-output
@@ -20,7 +20,7 @@ import type {
   GroundedResult,
   TaskClass,
 } from "./types";
-import { resolveModel } from "./model-routing";
+import { resolveDeepResearchAgent, resolveModel } from "./model-routing";
 import { withRetry } from "./retry";
 import { parseAndValidate } from "./schema-validate";
 
@@ -314,13 +314,15 @@ export class GeminiAdapter implements LLMProvider {
   }
 
   async runDeepResearch(cred: Credential, brief: string, opts?: { max?: boolean }): Promise<DeepResearchHandle> {
-    // Pick the comprehensive agent when max=true; default to the faster preview agent. §9.2.5 Jalur A.
-    const agent = resolveModel("deep_research", "gemini");
+    // Official Interactions Deep Research agent slugs (NOT a generateContent model id). §9.2.5 Jalur A, §12.8.
+    // Background execution requires store=true; agent_config carries the documented type + planning flags.
+    const agent = resolveDeepResearchAgent("gemini", opts?.max === true);
     const body: Record<string, unknown> = {
-      agent: opts?.max === true ? `${agent}-max` : agent,
+      agent,
       input: brief,
       background: true,
-      agent_config: { thinking_summaries: "auto" },
+      store: true,
+      agent_config: { type: "deep-research", thinking_summaries: "auto", collaborative_planning: true },
     };
     const data = await this.interactions(cred, "POST", "", body);
     const ref = data.id ?? data.name ?? "";
@@ -343,7 +345,8 @@ export class GeminiAdapter implements LLMProvider {
     const model = requireModel("image_gen");
     const body: Record<string, unknown> = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ["IMAGE"] },
+      // Nano Banana image models expect BOTH modalities; we still extract only the inlineData image part.
+      generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
     };
     const data = await this.generateContent(cred, model, body);
     const parts = data.candidates?.[0]?.content?.parts ?? [];

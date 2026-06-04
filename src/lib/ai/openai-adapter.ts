@@ -1,19 +1,39 @@
 // src/lib/ai/openai-adapter.ts
-// OpenAI adapter — implemented against the official Responses API (verified via context7, 2026-06).
+// OpenAI adapter — implemented against the official Responses API (verified against developers.openai.com, 2026-06-04).
 //   Endpoint: POST https://api.openai.com/v1/responses, Authorization: Bearer.   §12.15
-//   Structured Outputs: text.format = { type:"json_schema", name, strict:true, schema }.
+//   Structured Outputs: text.format = { type:"json_schema", name, strict:true, schema }. Strict mode
+//     REQUIRES additionalProperties:false + every property in required[] — we enforce that with
+//     toStrictJsonSchema() so a Gemini-authored (looser) schema doesn't 400 on OpenAI.
 //   Output: response.output[] → item type "message" → content[] of { type:"output_text", text, annotations[] }
 //           or { type:"refusal", refusal }. Reasoning items are skipped.
 //   Web search: tools:[{type:"web_search"}] → output_text annotations of type "url_citation"
 //               ({ url, title, start_index, end_index }) → normalized to the shared Citation type.
-//   Key validation: GET /v1/models. Reasoning depth: reasoning.effort. System prompt: top-level `instructions`.
-// REST via fetch (no SDK). Decrypt the key in-memory per call; never log it. Deep Research / image are later phases.
+//   Key validation: GET /v1/models. Reasoning depth: reasoning.effort ∈ {low,medium,high,xhigh}.
+// REST via fetch (no SDK). Decrypt the key in-memory per call; never log it.
 
 import type { LLMProvider, StructuredOpts, ImageOpts } from "./llm-provider";
 import type { Capabilities, Citation, Credential, DeepResearchHandle, GroundedResult, TaskClass } from "./types";
-import { resolveModel } from "./model-routing";
+import { resolveDeepResearchAgent, resolveModel } from "./model-routing";
 import { withRetry } from "./retry";
 import { parseAndValidate } from "./schema-validate";
+
+/**
+ * Coerce a JSON Schema into OpenAI strict-mode form: every object gets additionalProperties:false and
+ * required = all its property keys (OpenAI strict requires this; use nullable types for "optional").
+ * Idempotent on already-conformant schemas. PRD §12.15.
+ */
+export function toStrictJsonSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toStrictJsonSchema);
+  if (schema === null || typeof schema !== "object") return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema as Record<string, unknown>)) out[k] = toStrictJsonSchema(v);
+  const props = out["properties"];
+  if (out["type"] === "object" && props !== null && typeof props === "object") {
+    out["additionalProperties"] = false;
+    out["required"] = Object.keys(props as Record<string, unknown>);
+  }
+  return out;
+}
 
 const OPENAI_BASE = "https://api.openai.com/v1";
 
@@ -60,10 +80,13 @@ function mapBgStatus(status: string | undefined): DeepResearchHandle["status"] {
   return "running";
 }
 
-/** Map the PAL reasoning levels onto Responses API `reasoning.effort`. */
-export function mapReasoningEffort(reasoning: NonNullable<StructuredOpts["reasoning"]>): "low" | "medium" | "high" {
+/** Map the PAL reasoning levels onto Responses API `reasoning.effort` ∈ {low,medium,high,xhigh}. §12.15 */
+export function mapReasoningEffort(
+  reasoning: NonNullable<StructuredOpts["reasoning"]>,
+): "low" | "medium" | "high" | "xhigh" {
   if (reasoning === "minimal" || reasoning === "low") return "low";
   if (reasoning === "medium") return "medium";
+  if (reasoning === "xhigh") return "xhigh";
   return "high";
 }
 
@@ -227,7 +250,7 @@ export class OpenAIAdapter implements LLMProvider {
       const body: Record<string, unknown> = {
         model,
         input,
-        text: { format: { type: "json_schema", name: "structured_output", strict: true, schema: opts.jsonSchema } },
+        text: { format: { type: "json_schema", name: "structured_output", strict: true, schema: toStrictJsonSchema(opts.jsonSchema) } },
       };
       if (opts.systemPrompt !== undefined) body["instructions"] = opts.systemPrompt;
       if (opts.reasoning !== undefined) body["reasoning"] = { effort: mapReasoningEffort(opts.reasoning) };
@@ -260,9 +283,13 @@ export class OpenAIAdapter implements LLMProvider {
 
   // --- Later milestones. Verify shapes before implementing. ---
 
-  async runDeepResearch(cred: Credential, brief: string, _opts?: { max?: boolean }): Promise<DeepResearchHandle> {
-    // o3-deep-research, background=true, with a data source (web_search). Returns an id to poll. §12.15.
-    const model = requireModel("deep_research");
+  async runDeepResearch(cred: Credential, brief: string, opts?: { max?: boolean }): Promise<DeepResearchHandle> {
+    // Official deep-research models (o4-mini-deep-research economy / o3-deep-research quality when max=true),
+    // background=true, with ≥1 data source (web_search). Returns an id to poll. §12.15.
+    const model = resolveDeepResearchAgent("openai", opts?.max === true);
+    if (model === undefined) {
+      throw new OpenAIApiError("Tidak ada model Deep Research OpenAI terkonfigurasi.", 0, false);
+    }
     const data = await this.responses(cred, { model, input: brief, background: true, tools: [{ type: "web_search" }] });
     const ref = data.id ?? "";
     return { reportId: ref, status: mapBgStatus(data.status), providerRef: ref };
@@ -350,7 +377,7 @@ export class OpenAIAdapter implements LLMProvider {
     const model = requireModel(task);
     const body: Record<string, unknown> = { model, input: [{ role: "user", content }] };
     if (jsonSchema !== undefined) {
-      body["text"] = { format: { type: "json_schema", name: "structured_output", strict: true, schema: jsonSchema } };
+      body["text"] = { format: { type: "json_schema", name: "structured_output", strict: true, schema: toStrictJsonSchema(jsonSchema) } };
     }
     const { text } = extractMessage(await this.responses(cred, body));
     if (jsonSchema === undefined) return text as unknown as T;

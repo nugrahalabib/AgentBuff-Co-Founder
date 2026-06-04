@@ -7,7 +7,7 @@ import { OpenAIAdapter } from "@/lib/ai/openai-adapter";
 import type { Credential } from "@/lib/ai/types";
 import { encryptSecret, fingerprint } from "@/lib/crypto";
 import { app } from "@/server/runtime";
-import { currentUserId, guardMutation } from "@/server/api-helpers";
+import { currentUserId, guardMutation, rateLimit } from "@/server/api-helpers";
 
 const adapters = {
   gemini: () => new GeminiAdapter(),
@@ -22,6 +22,8 @@ export async function POST(req: Request): Promise<Response> {
   if (blocked !== null) return blocked;
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
+  const limited = rateLimit(`byok-link:${userId}`, 10, 60_000);
+  if (limited !== null) return limited;
 
   let body: { provider?: string; apiKey?: string };
   try {

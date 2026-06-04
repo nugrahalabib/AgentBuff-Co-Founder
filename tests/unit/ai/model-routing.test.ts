@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { providerOfModel, resolveModel } from "../../../src/lib/ai/model-routing";
+import { providerOfModel, resolveDeepResearchAgent, resolveModel } from "../../../src/lib/ai/model-routing";
 
 afterEach(() => {
   delete process.env["MODEL_IMAGE_GEN_GEMINI"];
@@ -8,8 +8,8 @@ afterEach(() => {
 
 describe("resolveModel", () => {
   it("returns the configured default when no override is set", () => {
-    expect(resolveModel("image_gen", "gemini")).toBe("gemini-3-pro-image-preview");
-    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.2");
+    expect(resolveModel("image_gen", "gemini")).toBe("gemini-3-pro-image");
+    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.5");
   });
 
   it("an env override wins over the default (no code change needed to fix a model id)", () => {
@@ -19,14 +19,24 @@ describe("resolveModel", () => {
 
   it("an empty override is ignored (falls back to default)", () => {
     process.env["MODEL_REASONING_HEAVY_OPENAI"] = "";
-    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.2");
+    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.5");
+  });
+});
+
+describe("resolveDeepResearchAgent", () => {
+  it("returns the standard agent by default and the comprehensive one when max=true", () => {
+    expect(resolveDeepResearchAgent("gemini")).toBe("deep-research-preview-04-2026");
+    expect(resolveDeepResearchAgent("gemini", true)).toBe("deep-research-max-preview-04-2026");
+    expect(resolveDeepResearchAgent("openai")).toBe("o4-mini-deep-research");
+    expect(resolveDeepResearchAgent("openai", true)).toBe("o3-deep-research");
   });
 });
 
 describe("providerOfModel", () => {
   it("reverse-maps a known default model to its provider", () => {
-    expect(providerOfModel("gpt-5-mini")).toBe("openai");
-    expect(providerOfModel("gemini-3-pro-image-preview")).toBe("gemini");
+    expect(providerOfModel("gpt-5.4-mini")).toBe("openai");
+    expect(providerOfModel("gemini-3-pro-image")).toBe("gemini");
+    expect(providerOfModel("gpt-5.3-codex")).toBe("openai_codex");
     expect(providerOfModel("totally-unknown")).toBe("unknown");
     expect(providerOfModel(undefined)).toBe("unknown");
   });

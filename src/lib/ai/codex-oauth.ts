@@ -129,13 +129,20 @@ interface TokenResponse {
   error_description?: string;
 }
 
+/** Ceiling on a token's assumed lifetime, so a malformed/forged JWT `exp` can't suppress refresh. */
+const MAX_EXPIRY_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
+
+function clampExpiry(ms: number): number {
+  return Math.min(ms, Date.now() + MAX_EXPIRY_HORIZON_MS);
+}
+
 function expiryFrom(token: TokenResponse, idToken: string | undefined, accessToken: string): number {
   if (typeof token.expires_in === "number" && token.expires_in > 0) {
-    return Date.now() + token.expires_in * 1000;
+    return clampExpiry(Date.now() + token.expires_in * 1000);
   }
   // Fall back to the JWT `exp` (seconds) of id_token, then access_token.
   const exp = decodeAccountInfo(idToken ?? "").exp ?? decodeAccountInfo(accessToken).exp;
-  if (typeof exp === "number") return exp * 1000;
+  if (typeof exp === "number") return clampExpiry(exp * 1000);
   return Date.now() + 60 * 60 * 1000; // conservative 1h default
 }
 
@@ -251,6 +258,6 @@ export function bundleFromAccessToken(accessToken: string): CodexTokenBundle {
     chatgptAccountId: info.chatgptAccountId,
     chatgptPlanType: info.chatgptPlanType,
     email: info.email,
-    expiresAt: info.exp !== undefined ? info.exp * 1000 : Date.now() + 60 * 60 * 1000,
+    expiresAt: info.exp !== undefined ? clampExpiry(info.exp * 1000) : Date.now() + 60 * 60 * 1000,
   };
 }

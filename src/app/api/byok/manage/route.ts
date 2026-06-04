@@ -2,7 +2,7 @@
 //   { action: "revalidate" }                  → re-probe all keys, refresh status/capabilities
 //   { action: "default",  provider }          → set the default provider
 //   { action: "remove",   provider }          → unlink a provider's credential
-// Returns the refreshed credential summary. Same-origin guarded (CSRF). Login/guest session required.
+// Returns the refreshed credential summary. Same-origin guarded (CSRF). Login required.
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";

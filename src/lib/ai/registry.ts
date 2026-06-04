@@ -23,7 +23,11 @@ import type { LLMProvider, ProviderRegistry } from "./llm-provider";
 import { OpenAIAdapter } from "./openai-adapter";
 import type { Capabilities, Credential, ProviderId, TaskClass } from "./types";
 
-export type ProviderErrorCode = "BYOK_KEY_MISSING" | "NO_PROVIDER_FOR_TASK" | "CODEX_REAUTH";
+export type ProviderErrorCode =
+  | "BYOK_KEY_MISSING"
+  | "NO_PROVIDER_FOR_TASK"
+  | "CODEX_REAUTH"
+  | "CODEX_REAUTH_TRANSIENT";
 
 export class ProviderError extends Error {
   constructor(
@@ -97,23 +101,41 @@ export class DefaultProviderRegistry implements ProviderRegistry {
 
     let bundle = parseBundle(decrypted);
     if (needsRefresh(bundle) && bundle.refreshToken !== undefined) {
-      try {
-        bundle = await refreshTokens(bundle);
-        if (isUpsertable(this.store)) {
-          await this.store.upsert({
-            ...chosen,
-            ciphertext: encryptSecret(serializeBundle(bundle), this.master),
-            fingerprint: fingerprint(bundle.accessToken),
-          });
+      const expired = bundle.expiresAt <= Date.now();
+      if (!isUpsertable(this.store)) {
+        // Rotating refresh tokens are one-time-use; without a place to persist the rotated value we must
+        // NOT consume it. Serve the still-valid current token, or force re-auth if it's already expired.
+        if (expired) {
+          throw new ProviderError("CODEX_REAUTH", "Sesi Codex perlu disegarkan tetapi penyimpanan tidak tersedia. Login ulang.");
         }
-      } catch (e) {
-        if (e instanceof CodexAuthError && e.unrecoverable) {
-          if (isUpsertable(this.store)) {
-            await this.store.patchMeta(chosen.userId, chosen.provider, { status: "invalid" });
+      } else {
+        const store = this.store;
+        try {
+          const refreshed = await refreshTokens(bundle);
+          // Persist the rotated bundle BEFORE serving it. If the write fails, the new (one-time) refresh
+          // token would be lost permanently — so abort instead of silently serving a soon-to-brick token.
+          try {
+            await store.upsert({
+              ...chosen,
+              ciphertext: encryptSecret(serializeBundle(refreshed), this.master),
+              fingerprint: fingerprint(refreshed.accessToken),
+            });
+          } catch {
+            throw new ProviderError("CODEX_REAUTH_TRANSIENT", "Gagal menyimpan sesi Codex yang disegarkan. Coba lagi sebentar.");
           }
-          throw new ProviderError("CODEX_REAUTH", "Sesi Codex/ChatGPT berakhir. Silakan login ulang dengan ChatGPT.");
+          bundle = refreshed;
+        } catch (e) {
+          if (e instanceof ProviderError) throw e;
+          if (e instanceof CodexAuthError && e.unrecoverable) {
+            await store.patchMeta(chosen.userId, chosen.provider, { status: "invalid" });
+            throw new ProviderError("CODEX_REAUTH", "Sesi Codex/ChatGPT berakhir. Silakan login ulang dengan ChatGPT.");
+          }
+          // Transient refresh failure (network/5xx). If the current token is still within its validity
+          // window, serve it; if it's already expired, serving is pointless → surface a transient error.
+          if (expired) {
+            throw new ProviderError("CODEX_REAUTH_TRANSIENT", "Tidak bisa menyegarkan sesi Codex. Coba lagi sebentar.");
+          }
         }
-        // Transient refresh failure: fall through with the still-current access token.
       }
     }
     return { secret: bundle.accessToken, accountId: bundle.chatgptAccountId };

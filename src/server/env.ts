@@ -4,7 +4,7 @@
 
 const isProd = process.env.NODE_ENV === "production";
 
-/** HMAC secret for the guest session cookie. Throws in prod if missing/weak. */
+/** Auth.js session secret (signs the JWT session). Throws in prod if missing/weak. */
 export function authSecret(): string {
   const v = process.env.AUTH_SECRET;
   if (v !== undefined && v.length >= 16) return v;

@@ -4,10 +4,18 @@
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
 import { OAuthError } from "@/server/oauth/oauth-service";
+import { clientIp, enforceBodyLimit, rateLimit } from "@/server/http-guards";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
+  // Public (unauthenticated) DCR endpoint — the most exposed mutating route. Throttle per-IP + cap body
+  // size so an anonymous caller can't flood the in-memory client registry. (RL-001, DOS-005)
+  const tooBig = enforceBodyLimit(req, 16 * 1024);
+  if (tooBig !== null) return tooBig;
+  const limited = rateLimit(`oauth-register:${clientIp(req)}`, 20, 60_000);
+  if (limited !== null) return limited;
+
   let body: { redirect_uris?: unknown; client_name?: unknown };
   try {
     body = (await req.json()) as { redirect_uris?: unknown; client_name?: unknown };

@@ -1,6 +1,6 @@
 // src/auth.ts — Auth.js (NextAuth v5) with Google sign-in. PRD §9.1.
-// JWT session (no DB adapter needed); the app user id is `google:<sub>`. Falls back to the
-// signed-cookie guest session for users who don't log in. Reads GOOGLE_CLIENT_ID/SECRET + AUTH_SECRET.
+// JWT session (no DB adapter needed); the app user id is `google:<sub>`. Login is required — there is no
+// guest fallback. Reads GOOGLE_CLIENT_ID/SECRET + AUTH_SECRET.
 
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";

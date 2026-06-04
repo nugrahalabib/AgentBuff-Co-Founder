@@ -6,11 +6,13 @@
 import { app } from "@/server/runtime";
 import { bearerFromHeader } from "@/server/mcp/token";
 import { dispatch, RPC } from "@/server/mcp/json-rpc";
+import { enforceBodyLimit } from "@/server/http-guards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
+const MAX_MCP_BODY_BYTES = 256 * 1024; // batches can be larger than other routes, but still bounded (DOS-005)
 
 function unauthorized(message: string, req: Request): Response {
   // RFC 9728: point clients at the protected-resource metadata to discover the auth server.
@@ -23,6 +25,9 @@ function unauthorized(message: string, req: Request): Response {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const tooBig = enforceBodyLimit(req, MAX_MCP_BODY_BYTES);
+  if (tooBig !== null) return tooBig;
+
   const token = bearerFromHeader(req.headers.get("authorization"));
   if (token === null) return unauthorized("Sertakan header Authorization: Bearer <token MCP>.", req);
 

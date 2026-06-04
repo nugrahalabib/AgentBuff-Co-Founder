@@ -144,7 +144,7 @@ describe("GeminiAdapter.generateImage", () => {
     const out = await new GeminiAdapter().generateImage(cred, "logo kopi minimalis");
     expect(out.imageRef).toBe("data:image/png;base64,QUJD");
     expect((fn.mock.calls[0]![0] as string)).toContain(`/models/${resolveModel("image_gen", "gemini")}:generateContent`);
-    expect((requestBody(fn)["generationConfig"] as Record<string, unknown>)["responseModalities"]).toEqual(["IMAGE"]);
+    expect((requestBody(fn)["generationConfig"] as Record<string, unknown>)["responseModalities"]).toEqual(["TEXT", "IMAGE"]);
   });
 
   it("throws when no image part is returned", async () => {

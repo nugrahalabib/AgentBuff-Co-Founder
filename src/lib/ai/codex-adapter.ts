@@ -174,7 +174,16 @@ export class CodexAdapter implements LLMProvider {
     }
 
     if (finalResponse !== null) return finalResponse;
-    if (errorMsg !== null) throw new CodexApiError(errorMsg, 200, false);
+    if (errorMsg !== null) {
+      // Never surface raw upstream text to callers (same rule as the HTTP-error path). Keep a generic
+      // Bahasa message; mark known overload/rate-limit patterns transient so withRetry can retry. (CDX-08)
+      const overloaded = /overload|rate.?limit|temporarily unavailable|service_unavailable|try again|busy/i.test(errorMsg);
+      throw new CodexApiError(
+        overloaded ? "Codex (ChatGPT) sedang sibuk. Coba lagi sebentar." : "Codex (ChatGPT) gagal memproses permintaan.",
+        200,
+        overloaded,
+      );
+    }
     if (deltaText !== "") {
       return { output: [{ type: "message", content: [{ type: "output_text", text: deltaText }] }] } as CodexResponse;
     }

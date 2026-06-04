@@ -28,6 +28,8 @@ Two hard limits, by design of OpenAI's Codex client:
    i.e. local `pnpm dev`, or a self-hosted single-user instance reached over localhost / an SSH tunnel.
    A remote, multi-user hosted deployment **cannot** catch that callback on its server (the `start`
    endpoint returns a clear 503 explaining this). There is no first-party hosted "Sign in with ChatGPT".
+   On a hosted deploy, set **`CODEX_LOGIN_DISABLED=1`** in the environment to hide the flow entirely so
+   the server never even attempts the port bind.
 2. **ToS grey area.** Driving a personal ChatGPT subscription session programmatically is not a
    sanctioned API use; treat it as use-at-your-own-risk for **your own** account. Prefer an API key for
    anything shared/production.

@@ -10,7 +10,7 @@ import { consumeCodexLogin, pollCodexLogin } from "@/lib/ai/codex-loopback";
 import type { Credential } from "@/lib/ai/types";
 import { encryptSecret, fingerprint } from "@/lib/crypto";
 import { app } from "@/server/runtime";
-import { currentUserId, guardMutation } from "@/server/api-helpers";
+import { currentUserId, guardMutation, rateLimit } from "@/server/api-helpers";
 
 export const runtime = "nodejs";
 
@@ -31,14 +31,19 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "loginId wajib diisi." }, { status: 400 });
   }
 
-  const poll = pollCodexLogin(loginId);
+  // Poll throttle: the UI polls every 2s; cap to avoid a tight loop hammering the endpoint. (RL-003)
+  const limited = rateLimit(`codex-status:${userId}`, 60, 60_000);
+  if (limited !== null) return limited;
+
+  // User-bound: only the account that started this login may poll/consume it (CDX-01).
+  const poll = pollCodexLogin(loginId, userId);
   if (poll.status === "pending") return NextResponse.json({ status: "pending" });
   if (poll.status === "error") {
     return NextResponse.json({ status: "error", error: "Login ChatGPT gagal atau dibatalkan. Coba lagi." });
   }
 
   // Success → consume the one-time bundle, validate it works, then persist (encrypted) for this user.
-  const bundle = consumeCodexLogin(loginId);
+  const bundle = consumeCodexLogin(loginId, userId);
   if (bundle === null) {
     return NextResponse.json({ status: "error", error: "Sesi login sudah dipakai atau kedaluwarsa." });
   }
@@ -61,6 +66,14 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await app.ensureUser(userId);
+  // Become default only if nothing else is currently the default (first credential) or this Codex
+  // credential already was — do NOT silently hijack a working Gemini/OpenAI default, since Codex has
+  // fewer capabilities (no image-gen/deep-research/vision). The user can switch in Settings. (CDX-03)
+  const existing = await app.credentials.listForUser(userId);
+  const someoneElseIsDefault = existing.some(
+    (c) => c.provider !== "openai_codex" && c.status === "active" && c.isDefault,
+  );
+  const wasDefault = existing.find((c) => c.provider === "openai_codex")?.isDefault === true;
   await app.credentials.upsert({
     userId,
     provider: "openai_codex",
@@ -68,10 +81,9 @@ export async function POST(req: Request): Promise<Response> {
     ciphertext: encryptSecret(serializeBundle(bundle), app.master),
     fingerprint: fingerprint(bundle.accessToken),
     capabilities,
-    isDefault: true,
+    isDefault: wasDefault || !someoneElseIsDefault,
     status: "active",
   });
-  await app.credentials.setDefault(userId, "openai_codex");
 
   return NextResponse.json({
     status: "success",
