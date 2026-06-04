@@ -3,15 +3,27 @@
 // capability-appropriate BYOK provider and decrypt its secret in-memory. Prefer the user's default;
 // fall back to any active provider that supports the task (e.g. route image_gen to Gemini if the
 // default OpenAI key isn't org-verified for images).
+//
+// Codex/"Sign in with ChatGPT" credentials are oauth_token bundles (access + rotating refresh + the
+// chatgpt-account-id) stored as encrypted JSON. At selection time we proactively refresh the access
+// token (5-day lead) and re-persist the rotated bundle, so any LLM call always carries a fresh token.
 
-import { decryptSecret, type MasterKeyProvider } from "../crypto";
-import type { CredentialStore } from "./credential-store";
+import { decryptSecret, encryptSecret, fingerprint, type MasterKeyProvider } from "../crypto";
+import type { CredentialStore, StoredCredential, UpsertableCredentialStore } from "./credential-store";
+import { CodexAdapter } from "./codex-adapter";
+import {
+  CodexAuthError,
+  needsRefresh,
+  parseBundle,
+  refreshTokens,
+  serializeBundle,
+} from "./codex-oauth";
 import { GeminiAdapter } from "./gemini-adapter";
 import type { LLMProvider, ProviderRegistry } from "./llm-provider";
 import { OpenAIAdapter } from "./openai-adapter";
 import type { Capabilities, Credential, ProviderId, TaskClass } from "./types";
 
-export type ProviderErrorCode = "BYOK_KEY_MISSING" | "NO_PROVIDER_FOR_TASK";
+export type ProviderErrorCode = "BYOK_KEY_MISSING" | "NO_PROVIDER_FOR_TASK" | "CODEX_REAUTH";
 
 export class ProviderError extends Error {
   constructor(
@@ -26,13 +38,17 @@ export class ProviderError extends Error {
 const ADAPTERS: Record<ProviderId, () => LLMProvider> = {
   gemini: () => new GeminiAdapter(),
   openai: () => new OpenAIAdapter(),
-  // Codex (Sign in with ChatGPT) speaks the same Responses surface; its OAuth auth lands later (§12.16).
-  openai_codex: () => new OpenAIAdapter(),
+  // Codex (Sign in with ChatGPT) is served against the ChatGPT backend, NOT api.openai.com. §12.16
+  openai_codex: () => new CodexAdapter(),
 };
 
 /** Construct the LLM adapter for a provider (shared by the registry and credential health checks). */
 export function adapterFor(provider: ProviderId): LLMProvider {
   return ADAPTERS[provider]();
+}
+
+function isUpsertable(store: CredentialStore): store is UpsertableCredentialStore {
+  return typeof (store as UpsertableCredentialStore).upsert === "function";
 }
 
 /** Capability each task class requires for capability-aware selection. Undefined = any provider works. */
@@ -67,11 +83,39 @@ export class DefaultProviderRegistry implements ProviderRegistry {
       throw new ProviderError("NO_PROVIDER_FOR_TASK", `Tidak ada provider tertaut yang mendukung task "${task}".`);
     }
 
-    const cred: Credential = {
-      provider: chosen.provider,
-      type: chosen.credType,
-      secret: decryptSecret(chosen.ciphertext, this.master),
-    };
+    const { secret, accountId } = await this.resolveSecret(chosen);
+    const cred: Credential = { provider: chosen.provider, type: chosen.credType, secret, accountId };
     return { provider: ADAPTERS[chosen.provider](), cred };
+  }
+
+  /** Decrypt the stored secret; for Codex, parse the token bundle and proactively refresh + re-persist. */
+  private async resolveSecret(chosen: StoredCredential): Promise<{ secret: string; accountId?: string }> {
+    const decrypted = decryptSecret(chosen.ciphertext, this.master);
+    if (!(chosen.credType === "oauth_token" && chosen.provider === "openai_codex")) {
+      return { secret: decrypted };
+    }
+
+    let bundle = parseBundle(decrypted);
+    if (needsRefresh(bundle) && bundle.refreshToken !== undefined) {
+      try {
+        bundle = await refreshTokens(bundle);
+        if (isUpsertable(this.store)) {
+          await this.store.upsert({
+            ...chosen,
+            ciphertext: encryptSecret(serializeBundle(bundle), this.master),
+            fingerprint: fingerprint(bundle.accessToken),
+          });
+        }
+      } catch (e) {
+        if (e instanceof CodexAuthError && e.unrecoverable) {
+          if (isUpsertable(this.store)) {
+            await this.store.patchMeta(chosen.userId, chosen.provider, { status: "invalid" });
+          }
+          throw new ProviderError("CODEX_REAUTH", "Sesi Codex/ChatGPT berakhir. Silakan login ulang dengan ChatGPT.");
+        }
+        // Transient refresh failure: fall through with the still-current access token.
+      }
+    }
+    return { secret: bundle.accessToken, accountId: bundle.chatgptAccountId };
   }
 }

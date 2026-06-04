@@ -1,17 +1,36 @@
 # Auth & Credentials Setup
 
-The app works **out of the box** with a guest session + your BYOK key. This doc covers the optional production upgrades.
+Sign in with **Google** is required (the old guest session was removed). Persistence auto-switches:
+Postgres when `DATABASE_URL` is set, else in-memory. This doc covers the optional production upgrades.
 
 ## 1) BYOK providers (what users link in Onboarding)
 Three options on `/onboarding` (key/token validated live, then stored **envelope-encrypted**):
 
-| Provider | What to paste | Where to get it |
+| Provider | How to link | Where to get it |
 |---|---|---|
-| **Gemini API key** (recommended) | `AIza…` | https://aistudio.google.com/apikey (free tier) |
-| **OpenAI API key** | `sk-…` | https://platform.openai.com/api-keys |
-| **Codex — Sign in with ChatGPT** | a Codex/ChatGPT **access token** | run `codex login` (Codex CLI), then copy the access token · https://developers.openai.com/codex/ |
+| **Gemini API key** (recommended) | paste `AIza…` | https://aistudio.google.com/apikey (free tier) |
+| **OpenAI API key** | paste `sk-…` | https://platform.openai.com/api-keys |
+| **Codex — Login dengan ChatGPT** | click **Login ChatGPT** → approve in the OpenAI tab | uses your ChatGPT subscription (no API key) |
 
-> Note (PRD §12.16 / R19): full *interactive* ChatGPT OAuth (browser redirect) is intended for the **desktop/CLI** mode. In the hosted web app, Codex is supported as a **token paste** (`oauth_token`), validated against the OpenAI Responses API. If your token isn't API-compatible, you'll get a clear error — use a Gemini/OpenAI key instead.
+### Codex / "Sign in with ChatGPT" — the honest constraints (PRD §12.16)
+The **Login dengan ChatGPT (Codex)** button runs the real OpenAI Codex OAuth flow (PKCE/S256 against
+`auth.openai.com`, public Codex CLI client `app_EMoamEEZ73f0CkXaXp7hrann`). Once linked, AgentBuff serves
+the user's LLM calls against the **ChatGPT backend** (`https://chatgpt.com/backend-api/codex/responses`),
+so a ChatGPT Plus/Pro subscription can replace a Gemini/OpenAI API key for text reasoning, structured
+JSON, and grounded search. Tokens (access + rotating refresh + `chatgpt-account-id`) are stored
+envelope-encrypted and refreshed automatically (5-day lead). **It does not expose api.openai.com
+features** — image generation, background Deep Research, and vision/doc are gated off for a Codex-only
+account (link a Gemini/OpenAI key for those); the registry routes those tasks accordingly.
+
+Two hard limits, by design of OpenAI's Codex client:
+1. **Loopback only.** The client only accepts the redirect `http://localhost:1455/auth/callback`. The
+   in-browser callback therefore works **only when AgentBuff runs on the same machine as the browser** —
+   i.e. local `pnpm dev`, or a self-hosted single-user instance reached over localhost / an SSH tunnel.
+   A remote, multi-user hosted deployment **cannot** catch that callback on its server (the `start`
+   endpoint returns a clear 503 explaining this). There is no first-party hosted "Sign in with ChatGPT".
+2. **ToS grey area.** Driving a personal ChatGPT subscription session programmatically is not a
+   sanctioned API use; treat it as use-at-your-own-risk for **your own** account. Prefer an API key for
+   anything shared/production.
 
 ## 2) Google login (Auth.js / NextAuth v5) — WIRED ✅
 Google sign-in is **implemented** (Auth.js v5, JWT session, user id `google:<sub>`; falls back to the

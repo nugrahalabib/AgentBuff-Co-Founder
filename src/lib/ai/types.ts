@@ -35,6 +35,11 @@ export interface Credential {
   type: CredentialType;
   /** Decrypted in-memory ONLY at call time. Never log. Never persist plaintext. PRD §13.1 */
   secret: string;
+  /**
+   * Codex/"Sign in with ChatGPT" only: the `chatgpt-account-id` the ChatGPT backend requires
+   * alongside the Bearer token. Decoded from the OAuth id_token. Undefined for API-key providers.
+   */
+  accountId?: string;
 }
 
 export interface GroundedResult {

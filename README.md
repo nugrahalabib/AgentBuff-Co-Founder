@@ -13,7 +13,7 @@
 [![Tests](https://img.shields.io/badge/tests-260%20passing-22c55e)](#-quality--testing)
 [![Engine coverage](https://img.shields.io/badge/deterministic%20engines-100%25%20covered-6366F1)](#-quality--testing)
 [![MCP](https://img.shields.io/badge/MCP-native-818CF8)](#-mcp--headless--ui)
-[![BYOK](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI-059669)](#-byok--bring-your-own-key)
+[![BYOK](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI%20%7C%20Codex-059669)](#-byok--bring-your-own-key)
 
 </div>
 
@@ -100,7 +100,7 @@ Then:
 **Works without any key:** the full financial calculator, the interactive validation-score tool, and project creation. See [`docs/RUNNING.md`](docs/RUNNING.md) for details.
 
 ### 🔑 BYOK — Bring Your Own Key
-The app never needs an AI key of its own. You bring a **Gemini** or **OpenAI** API key — your quota covers the compute (Gemini's free tier is generous), and your key is envelope-encrypted and never logged. (Note: "Sign in with ChatGPT"/Codex is not offered — OpenAI does not support it for third-party apps.)
+The app never needs an AI key of its own. You bring a **Gemini** or **OpenAI** API key — your quota covers the compute (Gemini's free tier is generous), and your key is envelope-encrypted and never logged. There's also a third option: **Login dengan ChatGPT (Codex)** — a real OpenAI Codex OAuth login that lets your ChatGPT subscription serve the AI (no API key). It works on **local / self-host** runs only (OpenAI's Codex client allows just the `localhost:1455` callback) and is best used with your own account; see [`docs/AUTH-SETUP.md`](docs/AUTH-SETUP.md).
 
 ---
 

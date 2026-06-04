@@ -9,7 +9,7 @@ afterEach(() => {
 describe("resolveModel", () => {
   it("returns the configured default when no override is set", () => {
     expect(resolveModel("image_gen", "gemini")).toBe("gemini-3-pro-image-preview");
-    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.5");
+    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.2");
   });
 
   it("an env override wins over the default (no code change needed to fix a model id)", () => {
@@ -19,7 +19,7 @@ describe("resolveModel", () => {
 
   it("an empty override is ignored (falls back to default)", () => {
     process.env["MODEL_REASONING_HEAVY_OPENAI"] = "";
-    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.5");
+    expect(resolveModel("reasoning_heavy", "openai")).toBe("gpt-5.2");
   });
 });
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/ui/button";
+import { CodexLoginButton } from "@/ui/codex-login-button";
 
 const SECTORS = ["F&B", "Fashion / Thrift", "Jasa", "Kreatif", "Ritel", "Digital", "Lainnya"];
 const STAGES: [string, string][] = [
@@ -16,8 +17,9 @@ const GOALS: [string, string][] = [
 ];
 const BUDGETS = ["< Rp5 jt", "Rp5–25 jt", "Rp25–100 jt", "> Rp100 jt"];
 
-// Only official, third-party-supported BYOK paths. "Sign in with ChatGPT"/Codex is NOT available for
-// third-party apps (developers.openai.com/codex/auth) — so it is intentionally not offered here.
+// API-key BYOK paths. A third option — "Login dengan ChatGPT (Codex)" — is offered below the key form
+// via the loopback OAuth flow (CodexLoginButton): it works when AgentBuff runs on the user's own machine
+// (local / self-host), since OpenAI's Codex client only allows the localhost:1455 callback. §12.16.
 const PROVIDERS = [
   { id: "gemini", label: "Gemini API key", hint: "Free tier Google — disarankan", url: "https://aistudio.google.com/apikey", ph: "AIza…" },
   { id: "openai", label: "OpenAI API key", hint: "Usage-based (Responses API)", url: "https://platform.openai.com/api-keys", ph: "sk-…" },
@@ -239,6 +241,19 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
           {keyMsg !== "" && (
             <p className={`text-sm ${keyStatus === "valid" ? "text-accent" : "text-destructive"}`}>{keyMsg}</p>
           )}
+
+          <div className="flex items-center gap-3 py-1">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">atau tanpa API key</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <CodexLoginButton
+            onLinked={() => {
+              setKeyStatus("valid");
+              setKeyMsg("ChatGPT (Codex) tersambung ✓");
+            }}
+          />
 
           <div className="flex gap-2 pt-2">
             <Button onClick={finish} variant="secondary" size="lg">

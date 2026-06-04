@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/ui/button";
+import { CodexLoginButton } from "@/ui/codex-login-button";
 
 type ProviderId = "gemini" | "openai" | "openai_codex";
 
@@ -27,8 +28,8 @@ interface CredentialSummary {
   credentials: CredentialView[];
 }
 
-// "Sign in with ChatGPT"/Codex is NOT available for third-party apps (developers.openai.com/codex/auth),
-// so only the official BYOK API-key paths are offered.
+// API-key BYOK paths. "Login dengan ChatGPT (Codex)" is offered separately (CodexLoginButton) via the
+// localhost:1455 loopback OAuth flow — usable on local / self-host deployments only. §12.16.
 const PROVIDERS: { id: ProviderId; label: string; hint: string; url: string; ph: string }[] = [
   { id: "gemini", label: "Gemini API key", hint: "Free tier Google — disarankan", url: "https://aistudio.google.com/apikey", ph: "AIza…" },
   { id: "openai", label: "OpenAI API key", hint: "Usage-based (Responses API)", url: "https://platform.openai.com/api-keys", ph: "sk-…" },
@@ -260,6 +261,9 @@ export function KeyManager({ initialSummary }: { initialSummary: CredentialSumma
           sesaat di memori ketika memanggil provider. Biaya AI memakai kuota kunci milikmu sendiri.
         </p>
       </div>
+
+      {/* Alternatif tanpa API key: login dengan langganan ChatGPT (Codex) */}
+      <CodexLoginButton onLinked={() => void refresh()} />
     </div>
   );
 }
