@@ -13,7 +13,7 @@
 [![Tests](https://img.shields.io/badge/tests-260%20passing-22c55e)](#-quality--testing)
 [![Engine coverage](https://img.shields.io/badge/deterministic%20engines-100%25%20covered-6366F1)](#-quality--testing)
 [![MCP](https://img.shields.io/badge/MCP-native-818CF8)](#-mcp--headless--ui)
-[![BYOK](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI%20%7C%20Codex-059669)](#-byok--bring-your-own-key)
+[![BYOK](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI-059669)](#-byok--bring-your-own-key)
 
 </div>
 
@@ -35,7 +35,7 @@ Plus three more non-negotiables:
 | | Principle | What it means |
 |---|---|---|
 | 🔗 | **Verifiable by default** | Every market claim carries a **clickable source** (`url_citation` → chip). No source → labelled **"estimasi"**. |
-| 🔌 | **Provider-agnostic (BYOK)** | All AI goes through a **Provider Abstraction Layer**. Bring your **Gemini / OpenAI / Codex** key — the app costs ~0 to run. |
+| 🔌 | **Provider-agnostic (BYOK)** | All AI goes through a **Provider Abstraction Layer**. Bring your **Gemini / OpenAI** API key — the app costs ~0 to run. |
 | 🤖 | **MCP-native** | Every capability is callable **headless** by external agents (Claude, ChatGPT, Cursor…) via Model Context Protocol — *headless == UI*. |
 | 🔒 | **Secrets are sacred** | BYOK keys are **envelope-encrypted** (AES-256-GCM), decrypted in-memory only, never logged, never committed. |
 
@@ -100,7 +100,7 @@ Then:
 **Works without any key:** the full financial calculator, the interactive validation-score tool, and project creation. See [`docs/RUNNING.md`](docs/RUNNING.md) for details.
 
 ### 🔑 BYOK — Bring Your Own Key
-The app never needs an AI key of its own. You bring **Gemini**, **OpenAI**, or **Codex** — your quota covers the compute (Gemini's free tier is generous), and your key is envelope-encrypted and never logged.
+The app never needs an AI key of its own. You bring a **Gemini** or **OpenAI** API key — your quota covers the compute (Gemini's free tier is generous), and your key is envelope-encrypted and never logged. (Note: "Sign in with ChatGPT"/Codex is not offered — OpenAI does not support it for third-party apps.)
 
 ---
 

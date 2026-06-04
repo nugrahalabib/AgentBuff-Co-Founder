@@ -27,10 +27,11 @@ interface CredentialSummary {
   credentials: CredentialView[];
 }
 
+// "Sign in with ChatGPT"/Codex is NOT available for third-party apps (developers.openai.com/codex/auth),
+// so only the official BYOK API-key paths are offered.
 const PROVIDERS: { id: ProviderId; label: string; hint: string; url: string; ph: string }[] = [
   { id: "gemini", label: "Gemini API key", hint: "Free tier Google — disarankan", url: "https://aistudio.google.com/apikey", ph: "AIza…" },
   { id: "openai", label: "OpenAI API key", hint: "Usage-based (Responses API)", url: "https://platform.openai.com/api-keys", ph: "sk-…" },
-  { id: "openai_codex", label: "Codex (ChatGPT)", hint: "Token dari `codex login`", url: "https://developers.openai.com/codex/", ph: "access token" },
 ];
 
 const PROVIDER_LABEL: Record<ProviderId, string> = {
@@ -210,7 +211,7 @@ export function KeyManager({ initialSummary }: { initialSummary: CredentialSumma
       {/* Add / replace */}
       <div className="rounded-card border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold">Tambah / ganti kunci</h3>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {PROVIDERS.map((p) => (
             <button
               key={p.id}
@@ -235,7 +236,7 @@ export function KeyManager({ initialSummary }: { initialSummary: CredentialSumma
           rel="noopener noreferrer"
           className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
         >
-          Cara dapat {provider === "openai_codex" ? "token" : "key"} ↗
+          Cara dapat key ↗
         </a>
 
         <div className="mt-2 flex gap-2">

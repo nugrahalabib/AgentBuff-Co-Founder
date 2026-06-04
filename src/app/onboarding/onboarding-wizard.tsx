@@ -16,10 +16,11 @@ const GOALS: [string, string][] = [
 ];
 const BUDGETS = ["< Rp5 jt", "Rp5–25 jt", "Rp25–100 jt", "> Rp100 jt"];
 
+// Only official, third-party-supported BYOK paths. "Sign in with ChatGPT"/Codex is NOT available for
+// third-party apps (developers.openai.com/codex/auth) — so it is intentionally not offered here.
 const PROVIDERS = [
   { id: "gemini", label: "Gemini API key", hint: "Free tier Google — disarankan", url: "https://aistudio.google.com/apikey", ph: "AIza…" },
   { id: "openai", label: "OpenAI API key", hint: "Usage-based (Responses API)", url: "https://platform.openai.com/api-keys", ph: "sk-…" },
-  { id: "openai_codex", label: "Codex (ChatGPT)", hint: "Token dari `codex login`", url: "https://developers.openai.com/codex/", ph: "access token" },
 ] as const;
 
 export function OnboardingWizard({ initialName }: { initialName: string }) {
@@ -199,7 +200,7 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {PROVIDERS.map((p) => (
               <button
                 key={p.id}
@@ -219,7 +220,7 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
           </div>
 
           <a href={activeProvider.url} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-semibold text-primary hover:underline">
-            Cara dapat {provider === "openai_codex" ? "token" : "key"} ↗
+            Cara dapat key ↗
           </a>
 
           <div className="flex gap-2">
