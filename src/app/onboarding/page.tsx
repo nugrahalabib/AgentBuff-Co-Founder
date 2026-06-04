@@ -22,11 +22,8 @@ export default async function OnboardingPage() {
         </div>
       ) : (
         <div className="mt-10 rounded-card border border-border bg-surface p-7 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-on-primary">
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden>
-              <path d="M12 2l1.9 5.6L19.5 9l-5.6 1.9L12 16.5 10.1 10.9 4.5 9l5.6-1.4L12 2z" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon-192.png" alt="AgentBuff" width={48} height={48} className="mx-auto h-12 w-12 rounded-2xl ring-1 ring-border" />
           <h1 className="mt-4 font-display text-2xl">Daftar / Masuk dulu</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Buat akun gratis dengan Google untuk memulai. Setelah itu kamu isi profil singkat & ide bisnismu, lalu (opsional)

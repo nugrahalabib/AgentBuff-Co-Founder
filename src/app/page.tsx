@@ -131,9 +131,8 @@ function SiteHeader() {
   return (
     <header className="flex items-center justify-between py-5">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-on-primary">
-          <Sparkle className="h-5 w-5" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="AgentBuff" width={36} height={36} className="h-9 w-9 rounded-xl ring-1 ring-border" />
         <span className="font-display text-lg">AgentBuff</span>
       </div>
       <LinkButton href="/onboarding" variant="ghost" size="md">

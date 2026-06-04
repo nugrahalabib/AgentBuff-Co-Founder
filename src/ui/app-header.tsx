@@ -21,11 +21,8 @@ export function AppHeader({ active }: { active?: Tab }) {
     <header className="sticky top-0 z-40 border-b border-border bg-surface/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-on-primary">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-              <path d="M12 2l1.9 5.6L19.5 9l-5.6 1.9L12 16.5 10.1 10.9 4.5 9l5.6-1.4L12 2z" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon-192.png" alt="AgentBuff" width={32} height={32} className="h-8 w-8 rounded-lg ring-1 ring-border" />
           <span className="font-display text-base">AgentBuff</span>
         </Link>
         <nav className="flex items-center gap-1">
