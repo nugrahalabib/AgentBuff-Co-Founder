@@ -2,30 +2,32 @@
 
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
-import { resolveSessionUser, currentUserId, withSession, guardMutation } from "@/server/api-helpers";
+import { currentUserId, guardMutation } from "@/server/api-helpers";
 
 export async function POST(req: Request): Promise<Response> {
   const blocked = guardMutation(req);
   if (blocked !== null) return blocked;
-  const s = await resolveSessionUser(req);
+  const userId = await currentUserId(req);
+  if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
+
   let body: { idea?: string; sector?: string; geography?: string };
   try {
     body = (await req.json()) as { idea?: string; sector?: string; geography?: string };
   } catch {
-    return withSession({ error: "Body permintaan bukan JSON yang valid." }, s, { status: 400 });
+    return NextResponse.json({ error: "Body permintaan bukan JSON yang valid." }, { status: 400 });
   }
   const idea = body.idea?.trim();
   if (idea === undefined || idea === "") {
-    return withSession({ error: "Ceritakan ide bisnismu dulu." }, s, { status: 400 });
+    return NextResponse.json({ error: "Ceritakan ide bisnismu dulu." }, { status: 400 });
   }
-  await app.ensureUser(s.userId);
+  await app.ensureUser(userId);
   const project = await app.projects.create({
-    ownerUserId: s.userId,
+    ownerUserId: userId,
     ideaText: idea,
     sector: body.sector,
     geography: body.geography,
   });
-  return withSession({ project }, s, { status: 201 });
+  return NextResponse.json({ project }, { status: 201 });
 }
 
 export async function GET(req: Request): Promise<Response> {

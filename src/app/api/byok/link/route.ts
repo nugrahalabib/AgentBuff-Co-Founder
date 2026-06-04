@@ -1,12 +1,13 @@
-// POST /api/byok/link — validate a BYOK key AND link it to the (guest) session, encrypted. PRD §9.1.4, §13.1.
-// The plaintext key is used in-memory only; only the envelope ciphertext + fingerprint are stored.
+// POST /api/byok/link — validate a BYOK key AND link it to the signed-in user, encrypted. PRD §9.1.4, §13.1.
+// The plaintext key is used in-memory only; only the envelope ciphertext + fingerprint are stored. Login required.
 
+import { NextResponse } from "next/server";
 import { GeminiAdapter } from "@/lib/ai/gemini-adapter";
 import { OpenAIAdapter } from "@/lib/ai/openai-adapter";
 import type { Credential } from "@/lib/ai/types";
 import { encryptSecret, fingerprint } from "@/lib/crypto";
 import { app } from "@/server/runtime";
-import { resolveSessionUser, withSession, guardMutation } from "@/server/api-helpers";
+import { currentUserId, guardMutation } from "@/server/api-helpers";
 
 const adapters = {
   gemini: () => new GeminiAdapter(),
@@ -19,13 +20,14 @@ type ValidatableProvider = keyof typeof adapters;
 export async function POST(req: Request): Promise<Response> {
   const blocked = guardMutation(req);
   if (blocked !== null) return blocked;
-  const s = await resolveSessionUser(req);
+  const userId = await currentUserId(req);
+  if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
 
   let body: { provider?: string; apiKey?: string };
   try {
     body = (await req.json()) as { provider?: string; apiKey?: string };
   } catch {
-    return withSession({ error: "Body permintaan bukan JSON yang valid." }, s, { status: 400 });
+    return NextResponse.json({ error: "Body permintaan bukan JSON yang valid." }, { status: 400 });
   }
 
   const provider = body.provider;
@@ -35,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
     apiKey === "" ||
     (provider !== "gemini" && provider !== "openai" && provider !== "openai_codex")
   ) {
-    return withSession({ error: "Pilih provider (Gemini / OpenAI / Codex) dan masukkan API key atau token." }, s, { status: 400 });
+    return NextResponse.json({ error: "Pilih provider (Gemini / OpenAI / Codex) dan masukkan API key atau token." }, { status: 400 });
   }
 
   const credType = provider === "openai_codex" ? "oauth_token" : "api_key";
@@ -45,16 +47,16 @@ export async function POST(req: Request): Promise<Response> {
     result = await adapters[provider as ValidatableProvider]().validateCredential(cred);
   } catch {
     // Generic message to the client (never echo raw adapter/provider text). §13.1 defense-in-depth.
-    return withSession({ ok: false, error: "Gagal memvalidasi kredensial. Coba lagi sebentar." }, s, { status: 502 });
+    return NextResponse.json({ ok: false, error: "Gagal memvalidasi kredensial. Coba lagi sebentar." }, { status: 502 });
   }
 
   if (!result.ok) {
-    return withSession({ ok: false, error: result.detail ?? "Kredensial ditolak." }, s);
+    return NextResponse.json({ ok: false, error: result.detail ?? "Kredensial ditolak." });
   }
 
-  await app.ensureUser(s.userId);
+  await app.ensureUser(userId);
   await app.credentials.upsert({
-    userId: s.userId,
+    userId,
     provider: provider as ValidatableProvider,
     credType,
     ciphertext: encryptSecret(apiKey, app.master),
@@ -64,5 +66,5 @@ export async function POST(req: Request): Promise<Response> {
     status: "active",
   });
 
-  return withSession({ ok: true, capabilities: result.capabilities }, s);
+  return NextResponse.json({ ok: true, capabilities: result.capabilities });
 }

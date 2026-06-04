@@ -492,18 +492,15 @@ class PrismaUsageRecorder implements UsageRecorder {
 }
 
 /**
- * Ensure a User row exists so FK-constrained rows can reference it.
- * Google users are normally created earlier by the sign-in event (persistGoogleUser); this is a
- * fallback that still records a real googleSub for `google:<sub>` ids and a guest placeholder otherwise.
+ * Ensure a User row exists so FK-constrained rows can reference it. Login is required, so `userId` is
+ * always `google:<sub>`; the row is normally created by the sign-in event (persistGoogleUser) — this is a
+ * fallback for the rare case a route runs before that completes.
  */
 export async function ensureUser(userId: string): Promise<void> {
-  const isGoogle = userId.startsWith("google:");
-  const googleSub = isGoogle ? userId.slice("google:".length) : `guest:${userId}`;
-  const email = isGoogle ? `${userId}@google.local` : `${userId}@guest.local`;
-  const displayName = isGoogle ? "Pengguna" : "Tamu";
+  const sub = userId.startsWith("google:") ? userId.slice("google:".length) : userId;
   await prisma.user.upsert({
     where: { id: userId },
-    create: { id: userId, googleSub, email, displayName },
+    create: { id: userId, googleSub: sub, email: `${userId}@google.local`, displayName: "Pengguna" },
     update: {},
   });
 }

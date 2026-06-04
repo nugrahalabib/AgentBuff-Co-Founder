@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppHeader } from "@/ui/app-header";
 import { NewProjectForm } from "@/ui/new-project-form";
 import { app } from "@/server/runtime";
@@ -25,7 +26,8 @@ const MODULES = [
 
 export default async function DashboardPage() {
   const userId = await getServerUserId();
-  const projects = userId !== null ? await app.projects.listForUser(userId) : [];
+  if (userId === null) redirect("/onboarding"); // login required — no guest mode
+  const projects = await app.projects.listForUser(userId);
 
   return (
     <div className="min-h-dvh">

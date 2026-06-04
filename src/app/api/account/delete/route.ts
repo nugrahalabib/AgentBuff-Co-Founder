@@ -4,7 +4,6 @@
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
 import { currentUserId, guardMutation } from "@/server/api-helpers";
-import { SESSION_COOKIE } from "@/server/session";
 
 export async function POST(req: Request): Promise<Response> {
   const blocked = guardMutation(req);
@@ -23,9 +22,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await app.account.delete(userId);
-
-  const res = NextResponse.json({ ok: true, deleted: true });
-  // Drop the guest session; Google users should also sign out client-side.
-  res.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
-  return res;
+  // The client signs out of Google after this resolves (clears the Auth.js session).
+  return NextResponse.json({ ok: true, deleted: true });
 }
