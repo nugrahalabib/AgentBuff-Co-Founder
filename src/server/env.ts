@@ -17,7 +17,13 @@ export function authSecret(): string {
 /** Base64 KEK for BYOK envelope encryption, or null (dev) to generate an ephemeral one. */
 export function byokMasterKeyBase64(): string | null {
   const v = process.env.BYOK_MASTER_KEY_BASE64;
-  if (v !== undefined && v.length > 0) return v;
+  if (v !== undefined && v.length > 0) {
+    // Validate early with a precise message rather than failing deep inside LocalMasterKey.
+    if (Buffer.from(v, "base64").length !== 32) {
+      throw new Error("BYOK_MASTER_KEY_BASE64 must decode to exactly 32 bytes (e.g. `openssl rand -base64 32`).");
+    }
+    return v;
+  }
   if (isProd) {
     throw new Error(
       "BYOK_MASTER_KEY_BASE64 is required in production — a per-process random KEK would make all stored BYOK keys undecryptable after restart.",

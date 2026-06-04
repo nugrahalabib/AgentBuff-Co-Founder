@@ -3,7 +3,7 @@
 // S3 is actually configured. `url()` issues an EXPIRING presigned GET URL (§9.4.7). Same interface as the
 // in-memory/disk impls — callers don't change.
 
-import type { ObjectStorage, PutObjectInput } from "./object-storage";
+import type { ObjectStorage, PutObjectInput, StoredObject } from "./object-storage";
 
 export interface S3Config {
   bucket: string;
@@ -33,7 +33,7 @@ export function s3ConfigFromEnv(): S3Config | null {
 
 // Minimal shapes of the dynamically-imported SDK pieces we use.
 interface S3ClientLike {
-  send(cmd: unknown): Promise<{ Body?: { transformToByteArray(): Promise<Uint8Array> }; ContentType?: string }>;
+  send(cmd: unknown): Promise<{ Body?: { transformToByteArray(): Promise<Uint8Array> }; ContentType?: string; Metadata?: Record<string, string> }>;
 }
 
 export class S3ObjectStorage implements ObjectStorage {
@@ -58,19 +58,27 @@ export class S3ObjectStorage implements ObjectStorage {
     return this.clientPromise;
   }
 
-  async put({ key, data, contentType }: PutObjectInput): Promise<{ ref: string }> {
+  async put({ key, data, contentType, ownerUserId }: PutObjectInput): Promise<{ ref: string }> {
     const { client, sdk } = await this.lib();
-    await client.send(new sdk.PutObjectCommand({ Bucket: this.cfg.bucket, Key: key, Body: data, ContentType: contentType }));
+    await client.send(
+      new sdk.PutObjectCommand({
+        Bucket: this.cfg.bucket,
+        Key: key,
+        Body: data,
+        ContentType: contentType,
+        Metadata: ownerUserId !== undefined ? { owner: ownerUserId } : undefined,
+      }),
+    );
     return { ref: key };
   }
 
-  async get(ref: string): Promise<{ data: Buffer; contentType: string } | null> {
+  async get(ref: string): Promise<StoredObject | null> {
     const { client, sdk } = await this.lib();
     try {
       const out = await client.send(new sdk.GetObjectCommand({ Bucket: this.cfg.bucket, Key: ref }));
       if (out.Body === undefined) return null;
       const bytes = await out.Body.transformToByteArray();
-      return { data: Buffer.from(bytes), contentType: out.ContentType ?? "application/octet-stream" };
+      return { data: Buffer.from(bytes), contentType: out.ContentType ?? "application/octet-stream", ownerUserId: out.Metadata?.["owner"] };
     } catch {
       return null;
     }

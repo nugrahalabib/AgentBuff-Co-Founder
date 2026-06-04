@@ -135,6 +135,13 @@ function requireModel(task: TaskClass): string {
   return model;
 }
 
+/** SSRF guard: reject anything that is not an inline base64 data URL. */
+function requireDataUrl(ref: string): void {
+  if (!/^data:[^;]+;base64,/.test(ref)) {
+    throw new OpenAIApiError("Sumber harus berupa data URL (data:<mime>;base64,...).", 400, false);
+  }
+}
+
 export class OpenAIAdapter implements LLMProvider {
   readonly id = "openai";
 
@@ -318,6 +325,9 @@ export class OpenAIAdapter implements LLMProvider {
     });
   }
   async understandImage<T = unknown>(cred: Credential, imageRef: string, prompt: string, jsonSchema?: object): Promise<T> {
+    // SSRF guard: only inline base64 data URLs — never forward a caller-controlled http(s) URL to the
+    // provider (which would fetch it server-side). Mirrors the Gemini adapter. PRD §13.3.
+    requireDataUrl(imageRef);
     const content = [
       { type: "input_text", text: prompt },
       { type: "input_image", image_url: imageRef },
@@ -327,6 +337,7 @@ export class OpenAIAdapter implements LLMProvider {
 
   async understandDocument<T = unknown>(cred: Credential, fileRef: string, jsonSchema: object): Promise<T> {
     // input_file accepts a data URL (filename + file_data) for PDFs/images. PRD §9.3.4.1, §12.15.
+    requireDataUrl(fileRef);
     const content = [
       { type: "input_text", text: "Ekstrak field terstruktur dari dokumen ini sesuai schema; jangan mengarang." },
       { type: "input_file", filename: "dokumen", file_data: fileRef },

@@ -35,6 +35,14 @@ describe("AccountService.export", () => {
     expect(out.projects[0]?.project.id).toBe("p1");
     expect(out.exportedAt).toBe("2026-06-04T00:00:00Z");
   });
+
+  it("NEVER leaks secret material in the export (locks the §13.1 invariant)", async () => {
+    const { svc } = makeService();
+    const json = JSON.stringify(await svc.export("u1")).toLowerCase();
+    expect(json).not.toContain("ciphertext");
+    expect(json).not.toContain("secret");
+    expect(json).not.toContain("tokenhash");
+  });
 });
 
 describe("AccountService.delete", () => {

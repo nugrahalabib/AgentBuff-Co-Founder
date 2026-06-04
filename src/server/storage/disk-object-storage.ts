@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { ObjectStorage, PutObjectInput } from "./object-storage";
+import type { ObjectStorage, PutObjectInput, StoredObject } from "./object-storage";
 
 export class DiskObjectStorage implements ObjectStorage {
   private readonly baseDir: string;
@@ -26,21 +26,23 @@ export class DiskObjectStorage implements ObjectStorage {
     this.ensured = true;
   }
 
-  async put({ key, data, contentType }: PutObjectInput): Promise<{ ref: string }> {
+  async put({ key, data, contentType, ownerUserId }: PutObjectInput): Promise<{ ref: string }> {
     await this.ensureDir();
     const ref = this.refFor(key);
     await writeFile(join(this.baseDir, ref), data);
     await writeFile(join(this.baseDir, `${ref}.type`), contentType, "utf8");
+    await writeFile(join(this.baseDir, `${ref}.owner`), ownerUserId ?? "", "utf8");
     return { ref };
   }
 
-  async get(ref: string): Promise<{ data: Buffer; contentType: string } | null> {
+  async get(ref: string): Promise<StoredObject | null> {
     // ref is a 64-char hex hash; reject anything else to prevent path games.
     if (!/^[0-9a-f]{64}$/.test(ref)) return null;
     try {
       const data = await readFile(join(this.baseDir, ref));
       const contentType = await readFile(join(this.baseDir, `${ref}.type`), "utf8").catch(() => "application/octet-stream");
-      return { data, contentType };
+      const owner = await readFile(join(this.baseDir, `${ref}.owner`), "utf8").catch(() => "");
+      return { data, contentType, ownerUserId: owner === "" ? undefined : owner };
     } catch {
       return null;
     }
@@ -50,6 +52,7 @@ export class DiskObjectStorage implements ObjectStorage {
     if (!/^[0-9a-f]{64}$/.test(ref)) return;
     await rm(join(this.baseDir, ref), { force: true });
     await rm(join(this.baseDir, `${ref}.type`), { force: true });
+    await rm(join(this.baseDir, `${ref}.owner`), { force: true });
   }
 
   url(ref: string): string {

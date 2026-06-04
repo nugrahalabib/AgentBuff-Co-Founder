@@ -43,9 +43,9 @@ export async function POST(req: Request): Promise<Response> {
   let result;
   try {
     result = await adapters[provider as ValidatableProvider]().validateCredential(cred);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Validasi gagal.";
-    return withSession({ ok: false, error: message }, s, { status: 502 });
+  } catch {
+    // Generic message to the client (never echo raw adapter/provider text). §13.1 defense-in-depth.
+    return withSession({ ok: false, error: "Gagal memvalidasi kredensial. Coba lagi sebentar." }, s, { status: 502 });
   }
 
   if (!result.ok) {

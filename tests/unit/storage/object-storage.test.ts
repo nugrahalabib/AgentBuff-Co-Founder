@@ -26,4 +26,10 @@ describe("InMemoryObjectStorage", () => {
     await s.delete(ref);
     expect(await s.get(ref)).toBeNull();
   });
+
+  it("records the owner so the serving route can enforce ownership", async () => {
+    const s = new InMemoryObjectStorage();
+    const { ref } = await s.put({ key: "brand/x.png", data: Buffer.from("i"), contentType: "image/png", ownerUserId: "u1" });
+    expect((await s.get(ref))?.ownerUserId).toBe("u1");
+  });
 });

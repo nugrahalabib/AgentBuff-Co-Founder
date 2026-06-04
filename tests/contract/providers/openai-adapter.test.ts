@@ -209,6 +209,12 @@ describe("OpenAIAdapter.understandImage", () => {
     const input = (requestBody(fn)["input"] as { content: { type: string }[] }[])[0]!.content;
     expect(input.some((c) => c.type === "input_image")).toBe(true);
   });
+
+  it("rejects a remote http(s) URL (SSRF guard) without calling the API", async () => {
+    const fn = stubFetch(fakeResponse(200, message([])));
+    await expect(new OpenAIAdapter().understandImage(cred, "https://attacker.example/x.png", "baca")).rejects.toThrow(/data URL/i);
+    expect(fn).not.toHaveBeenCalled();
+  });
 });
 
 describe("pure helpers", () => {

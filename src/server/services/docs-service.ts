@@ -66,8 +66,9 @@ function buildPrompt(state: ProjectState, bound: BoundFinancials, type: Document
     `Ide: ${p.ideaText}`,
     p.sector !== undefined ? `Sektor: ${p.sector}` : "",
     research?.summary !== undefined ? `Ringkasan riset (DATA tergrounding):\n${wrapUntrusted(research.summary)}` : "",
-    competitors !== "" ? `Kompetitor: ${competitors}` : "",
-    narrative?.execSummary !== undefined ? `Ringkasan plan: ${narrative.execSummary}` : "",
+    // Competitor names + plan exec-summary are derived from grounded web content → wrap as DATA (§13.3).
+    competitors !== "" ? `Kompetitor (DATA): ${wrapUntrusted(competitors)}` : "",
+    narrative?.execSummary !== undefined ? `Ringkasan plan (DATA): ${wrapUntrusted(narrative.execSummary)}` : "",
     `Angka finansial FINAL (rujuk, jangan ubah): ${JSON.stringify(bound)}`,
     `Tulis konten yang spesifik, jujur, dan persuasif untuk audiens investor Indonesia.`,
   ]

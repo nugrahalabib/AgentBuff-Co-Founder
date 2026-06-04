@@ -8,11 +8,19 @@ export interface PutObjectInput {
   key: string;
   data: Buffer;
   contentType: string;
+  /** User who owns this object. Enforced at the serving route (defense-in-depth, not just unguessable refs). */
+  ownerUserId?: string;
+}
+
+export interface StoredObject {
+  data: Buffer;
+  contentType: string;
+  ownerUserId?: string;
 }
 
 export interface ObjectStorage {
   put(input: PutObjectInput): Promise<{ ref: string }>;
-  get(ref: string): Promise<{ data: Buffer; contentType: string } | null>;
+  get(ref: string): Promise<StoredObject | null>;
   delete(ref: string): Promise<void>;
   /** A URL the browser can fetch the object from (served by /api/storage/[ref]). */
   url(ref: string): string;
@@ -26,13 +34,13 @@ export function parseDataUrl(dataUrl: string): { data: Buffer; contentType: stri
 }
 
 export class InMemoryObjectStorage implements ObjectStorage {
-  private readonly store = new Map<string, { data: Buffer; contentType: string }>();
+  private readonly store = new Map<string, StoredObject>();
 
-  async put({ key, data, contentType }: PutObjectInput): Promise<{ ref: string }> {
-    this.store.set(key, { data, contentType });
+  async put({ key, data, contentType, ownerUserId }: PutObjectInput): Promise<{ ref: string }> {
+    this.store.set(key, { data, contentType, ownerUserId });
     return { ref: key };
   }
-  async get(ref: string): Promise<{ data: Buffer; contentType: string } | null> {
+  async get(ref: string): Promise<StoredObject | null> {
     return this.store.get(ref) ?? null;
   }
   async delete(ref: string): Promise<void> {

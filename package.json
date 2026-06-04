@@ -15,7 +15,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/with-env.mjs prisma migrate dev",
+    "db:deploy": "node scripts/with-env.mjs prisma migrate deploy",
+    "db:status": "node scripts/with-env.mjs prisma migrate status"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",

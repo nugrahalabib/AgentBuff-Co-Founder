@@ -6,6 +6,19 @@ activates automatically — no code changes. Put these in `.env.local` (gitignor
 
 > The app auto-detects each backend the same way persistence auto-switches: present → use it, absent → fall back.
 
+## Database migrations (data safety) — PRD §13.4
+**Never run `prisma db push` against a database that has real user data** — it can drop columns/data on a
+rename or type change. The project uses **versioned migrations** (`prisma/migrations/`, baselined):
+
+```bash
+pnpm db:status     # show migration state
+pnpm db:migrate    # dev: create + apply a new migration after editing schema.prisma (reviewable SQL)
+pnpm db:deploy     # prod: apply committed migrations only — never drops, no --accept-data-loss
+```
+
+Commit every generated migration and code-review its SQL. `db push` is allowed ONLY for throwaway local
+sketching against an empty DB. Existing logged-in users keep their data across schema changes this way.
+
 ## Core (already wired)
 | Var | Purpose | Fallback if unset |
 |---|---|---|

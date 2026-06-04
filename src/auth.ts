@@ -38,13 +38,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const sub = profile.sub;
       if (typeof process.env.DATABASE_URL !== "string" || process.env.DATABASE_URL.length === 0) return;
       try {
-        const { persistGoogleUser } = await import("./server/db/auth-user");
-        await persistGoogleUser(`google:${sub}`, {
+        const googleUserId = `google:${sub}`;
+        const { persistGoogleUser, claimGuestData } = await import("./server/db/auth-user");
+        await persistGoogleUser(googleUserId, {
           sub,
           email: user.email ?? (typeof profile.email === "string" ? profile.email : null),
           name: user.name ?? (typeof profile.name === "string" ? profile.name : null),
           picture: user.image ?? (typeof profile.picture === "string" ? profile.picture : null),
         });
+        // If this person had worked as a guest, claim that data onto the Google account (no orphaning).
+        try {
+          const { cookies } = await import("next/headers");
+          const { verifySession, SESSION_COOKIE } = await import("./server/session");
+          const guestId = verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+          if (guestId !== null && !guestId.startsWith("google:")) {
+            await claimGuestData(googleUserId, guestId);
+          }
+        } catch {
+          // claim is best-effort; never block sign-in.
+        }
       } catch {
         // swallow — sign-in must succeed even if persistence fails.
       }

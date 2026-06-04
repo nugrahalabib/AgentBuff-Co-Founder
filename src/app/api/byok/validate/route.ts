@@ -34,8 +34,8 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const result = await adapter.validateCredential(cred);
     return NextResponse.json({ ok: result.ok, capabilities: result.capabilities, detail: result.detail });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Validasi gagal.";
-    return NextResponse.json({ ok: false, error: message }, { status: 502 });
+  } catch {
+    // Generic message to the client (never echo raw adapter/provider text). §13.1 defense-in-depth.
+    return NextResponse.json({ ok: false, error: "Gagal memvalidasi kredensial. Coba lagi sebentar." }, { status: 502 });
   }
 }
