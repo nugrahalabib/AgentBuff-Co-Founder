@@ -55,7 +55,7 @@ Give those three values and the Auth.js (NextAuth) Google provider gets wired in
 Persistence is **already wired**. When `DATABASE_URL` is set, the app uses Postgres (Prisma); otherwise it falls back to in-memory.
 
 - A dedicated, isolated database `agentbuff_cofounder` (own role, non-superuser) was created on the VPS Postgres — **separate** from other projects.
-- `DATABASE_URL` lives in `.env.local` (gitignored). Schema is applied with `pnpm exec prisma db push`.
+- `DATABASE_URL` lives in `.env.local` (gitignored). Schema is managed with **versioned migrations** (`pnpm db:migrate` dev · `pnpm db:deploy` prod) — **never `prisma db push`** on a DB with real data. See [INFRA-SETUP.md](INFRA-SETUP.md).
 - **Local dev** reaches the VPS DB through an SSH tunnel:
   ```bash
   ssh -N -L 55432:localhost:5432 agentbuff-vps     # keep running

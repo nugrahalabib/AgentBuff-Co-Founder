@@ -105,7 +105,7 @@ export async function handleRpc(req: JsonRpcRequest, deps: RpcDeps): Promise<Jso
         try {
           return ok(id, { contents: [await readResource(deps.ctx, uri)] });
         } catch (e) {
-          return err(id, RPC.INVALID_PARAMS, e instanceof Error ? e.message : "Resource tidak terbaca.");
+          return err(id, RPC.INVALID_PARAMS, e instanceof McpError ? e.message : "Resource tidak terbaca.");
         }
       }
 
@@ -118,7 +118,7 @@ export async function handleRpc(req: JsonRpcRequest, deps: RpcDeps): Promise<Jso
         try {
           return ok(id, { messages: getPrompt(p.name, p.arguments ?? {}) });
         } catch (e) {
-          return err(id, RPC.INVALID_PARAMS, e instanceof Error ? e.message : "Prompt tidak ditemukan.");
+          return err(id, RPC.INVALID_PARAMS, e instanceof McpError ? e.message : "Prompt tidak ditemukan.");
         }
       }
 
@@ -128,7 +128,8 @@ export async function handleRpc(req: JsonRpcRequest, deps: RpcDeps): Promise<Jso
     }
   } catch (e) {
     if (isNotification) return null;
-    const message = e instanceof Error ? e.message : "Kesalahan internal.";
+    // Only controlled McpError text is client-safe; never echo raw native/Prisma/internal messages.
+    const message = e instanceof McpError ? e.message : "Kesalahan internal.";
     return err(id, RPC.INTERNAL_ERROR, message);
   }
 }
@@ -183,8 +184,9 @@ async function handleToolCall(id: JsonRpcId, params: unknown, deps: RpcDeps): Pr
       resultStatus: "error",
       ts: deps.now(),
     });
-    // MCP convention: report tool execution failures as result content with isError:true.
-    const message = e instanceof McpError ? `[${e.code}] ${e.message}` : e instanceof Error ? e.message : "Tool gagal.";
+    // MCP convention: report tool failures as result content with isError:true. Only controlled McpError
+    // text is surfaced; any other (native/Prisma/adapter) error is genericized so nothing internal leaks.
+    const message = e instanceof McpError ? `[${e.code}] ${e.message}` : "Tool gagal dijalankan.";
     return ok(id, { content: [{ type: "text", text: message }], isError: true });
   }
 }

@@ -3,6 +3,7 @@
 // plaintext: views expose only fingerprint + capabilities + status. Re-validation decrypts in-memory,
 // probes the provider, and patches liveness — a transient outage does NOT mark a key invalid.
 
+import "server-only"; // decrypts BYOK secrets in-memory — never reachable from the client bundle
 import { decryptSecret, type MasterKeyProvider } from "@/lib/crypto";
 import { adapterFor } from "@/lib/ai/registry";
 import type { UpsertableCredentialStore } from "@/lib/ai/credential-store";

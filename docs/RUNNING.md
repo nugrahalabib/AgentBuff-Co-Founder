@@ -47,7 +47,7 @@ pnpm exec prisma validate
 
 ## Persistensi (Postgres vs in-memory)
 - Runtime **otomatis**: jika `DATABASE_URL` di-set (mis. di `.env.local`), app menyimpan ke **PostgreSQL via Prisma**; jika tidak, **in-memory** (reset saat restart).
-- Untuk Postgres lewat VPS saat dev, jaga **SSH tunnel** tetap hidup: `ssh -N -L 55432:localhost:5432 agentbuff-vps`. Detail di [AUTH-SETUP.md](AUTH-SETUP.md). Sekali setup tabel: `pnpm exec prisma db push`.
+- Untuk Postgres lewat VPS saat dev, jaga **SSH tunnel** tetap hidup: `ssh -N -L 55432:localhost:5432 agentbuff-vps`. Detail di [AUTH-SETUP.md](AUTH-SETUP.md). Skema dikelola lewat **migrasi berversi** (`pnpm db:migrate` di dev · `pnpm db:deploy` di prod) — **JANGAN `prisma db push`** pada DB berisi data (bisa menghapus kolom/data). Lihat [INFRA-SETUP.md](INFRA-SETUP.md).
 
 ## Catatan
 - **Auth**: sesi tamu via cookie bertanda-tangan. Untuk login Google, pasang Auth.js + isi `GOOGLE_CLIENT_ID/SECRET` — lihat [AUTH-SETUP.md](AUTH-SETUP.md).

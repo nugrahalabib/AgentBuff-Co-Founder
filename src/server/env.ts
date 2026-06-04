@@ -1,6 +1,7 @@
 // src/server/env.ts — fail-closed secret/env access. PRD §13.1.
 // In production, required secrets MUST be present (no insecure fallbacks → no forgeable sessions,
 // no per-process KEK that would silently make all stored BYOK ciphertext undecryptable on restart).
+import "server-only"; // build-time guard: importing this into a client component is a hard error
 
 const isProd = process.env.NODE_ENV === "production";
 

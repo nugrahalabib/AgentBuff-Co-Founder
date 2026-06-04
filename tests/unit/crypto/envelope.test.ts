@@ -45,6 +45,18 @@ describe("envelope encryption", () => {
     const restored = LocalMasterKey.fromBase64(b64);
     expect(decryptSecret(encryptSecret("x", master), restored)).toBe("x");
   });
+
+  it("dispatches on the envelope version and rejects an unknown one (back-compat guard)", () => {
+    // A current (v1) blob still decrypts...
+    const env = encryptSecret("byok-key", master);
+    expect(JSON.parse(Buffer.from(env, "base64").toString("utf8")).v).toBe(1);
+    expect(decryptSecret(env, master)).toBe("byok-key");
+    // ...but an unknown future version is refused with a clear error rather than mis-decoded.
+    const blob = JSON.parse(Buffer.from(env, "base64").toString("utf8")) as { v: number };
+    blob.v = 2;
+    const v2 = Buffer.from(JSON.stringify(blob), "utf8").toString("base64");
+    expect(() => decryptSecret(v2, master)).toThrow(/version/i);
+  });
 });
 
 describe("fingerprint", () => {

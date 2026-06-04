@@ -7,11 +7,12 @@
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
 import { currentUserId, guardMutation } from "@/server/api-helpers";
+import { NO_STORE } from "@/server/http-guards";
 
 export async function GET(req: Request): Promise<Response> {
   const userId = await currentUserId(req);
-  if (userId === null) return NextResponse.json({ clients: [] });
-  return NextResponse.json({ clients: await app.mcpGateway.listClients(userId) });
+  if (userId === null) return NextResponse.json({ clients: [] }, { headers: NO_STORE });
+  return NextResponse.json({ clients: await app.mcpGateway.listClients(userId) }, { headers: NO_STORE });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -33,12 +34,15 @@ export async function POST(req: Request): Promise<Response> {
     const scopes = body.readOnly === true ? (["read"] as const) : (["read", "write"] as const);
     const issued = await app.mcpGateway.issueToken(userId, body.name ?? "Token MCP", [...scopes]);
     // `token` is returned exactly once; it is never stored in plaintext nor retrievable later.
-    return NextResponse.json({
-      token: issued.token,
-      display: issued.display,
-      id: issued.id,
-      clients: await app.mcpGateway.listClients(userId),
-    });
+    return NextResponse.json(
+      {
+        token: issued.token,
+        display: issued.display,
+        id: issued.id,
+        clients: await app.mcpGateway.listClients(userId),
+      },
+      { headers: NO_STORE },
+    );
   }
 
   if (body.action === "revoke") {

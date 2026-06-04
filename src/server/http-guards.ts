@@ -4,6 +4,9 @@
 
 import { NextResponse } from "next/server";
 
+/** Header set for authenticated GETs that return per-user data — keeps PII out of proxy/bfcache/SW caches. */
+export const NO_STORE = { "Cache-Control": "no-store" } as const;
+
 /**
  * CSRF defense for cookie-authenticated mutating routes: require the request to be same-origin.
  * Browsers always attach `Origin` (and/or `Sec-Fetch-Site`) to cross-site mutations; a forged

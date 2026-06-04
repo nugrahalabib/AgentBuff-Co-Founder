@@ -151,15 +151,18 @@ export async function startCodexLogin(userId: string): Promise<StartLoginResult>
 export interface PollResult {
   status: "pending" | "success" | "error";
   error?: string;
-  bundle?: CodexTokenBundle;
 }
 
-/** Read (without consuming) the status of a pending login. Only the initiating user may read it. */
+/**
+ * Read (without consuming) the status of a pending login. Only the initiating user may read it.
+ * Deliberately returns NO token bundle — the secret-bearing bundle is reachable solely via the one-time,
+ * user-bound consumeCodexLogin, so a future edit that JSON-returns a poll result cannot leak a token.
+ */
 export function pollCodexLogin(loginId: string, userId: string): PollResult {
   sweep();
   const p = state.pending.get(loginId);
   if (p === undefined || p.userId !== userId) return { status: "error", error: "unknown_session" };
-  return { status: p.status, error: p.error, bundle: p.bundle };
+  return { status: p.status, error: p.error };
 }
 
 /** Consume a completed login (one-time): returns the bundle and deletes the entry. User-bound. */

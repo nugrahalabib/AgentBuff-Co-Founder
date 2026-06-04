@@ -23,7 +23,8 @@ export function DataRights() {
         setError(data.error ?? "Gagal menghapus akun.");
         return;
       }
-      // Data is gone; sign out (Google) and return home.
+      // Data is gone; wipe any device cache, then sign out (Google) and return home.
+      navigator.serviceWorker?.controller?.postMessage({ type: "clear-cache" });
       void signOut({ callbackUrl: "/" });
     } catch {
       setError("Tidak bisa menghubungi server.");

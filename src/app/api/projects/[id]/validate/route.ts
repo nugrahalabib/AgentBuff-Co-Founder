@@ -32,7 +32,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (e instanceof ProviderError) {
       return NextResponse.json({ error: "Tautkan API key dulu di Pengaturan.", code: e.code }, { status: 400 });
     }
-    const message = e instanceof Error ? e.message : "Gagal menjalankan validasi.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: "Gagal menjalankan validasi. Coba lagi sebentar." }, { status: 502 });
   }
 }

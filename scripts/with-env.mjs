@@ -1,7 +1,7 @@
 // scripts/with-env.mjs — run a command with .env.local loaded into the environment.
 // Prisma CLI only auto-loads `.env`, but our secrets (DATABASE_URL, …) live in `.env.local`
 // (Next.js convention, gitignored). This loads them WITHOUT printing any value, then execs the command.
-//   Usage:  node scripts/with-env.mjs prisma db push --skip-generate
+//   Usage:  node scripts/with-env.mjs prisma migrate deploy   (versioned; never `db push` on real data)
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 

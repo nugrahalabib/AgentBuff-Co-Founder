@@ -45,7 +45,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (e instanceof ProviderError) {
           send("error", { error: "Tautkan API key dulu di Pengaturan.", code: e.code });
         } else {
-          send("error", { error: e instanceof Error ? e.message : "Gagal menjalankan validasi." });
+          send("error", { error: "Gagal menjalankan validasi. Coba lagi sebentar." });
         }
       } finally {
         controller.close();

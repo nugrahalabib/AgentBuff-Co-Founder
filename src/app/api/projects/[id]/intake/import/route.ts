@@ -38,6 +38,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (e instanceof ProviderError) {
       return NextResponse.json({ error: "Tautkan API key dulu di Pengaturan.", code: e.code }, { status: 400 });
     }
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca dokumen." }, { status: 502 });
+    return NextResponse.json({ error: "Gagal membaca dokumen. Coba lagi sebentar." }, { status: 502 });
   }
 }

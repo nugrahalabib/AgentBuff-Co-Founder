@@ -28,6 +28,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Never ship browser source maps in prod (keeps original server/module source out of the client).
+  productionBrowserSourceMaps: false,
   // Pin the workspace root to this project (avoid Turbopack mis-inferring a parent folder).
   turbopack: { root: import.meta.dirname },
   // Server-only, dynamically-imported infra: keep them out of the bundle (loaded at runtime when configured).

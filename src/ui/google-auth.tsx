@@ -35,6 +35,8 @@ export function SignOutButton() {
   return (
     <button
       onClick={() => {
+        // Wipe any cached pages/assets so no data lingers on a shared device after sign-out.
+        navigator.serviceWorker?.controller?.postMessage({ type: "clear-cache" });
         void signOut({ callbackUrl: "/" });
       }}
       className="cursor-pointer rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"

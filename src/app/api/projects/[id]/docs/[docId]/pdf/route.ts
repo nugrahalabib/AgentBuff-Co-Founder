@@ -39,7 +39,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; doc
       },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Gagal merender PDF." }), {
+    return new Response(JSON.stringify({ error: "Gagal merender PDF. Coba lagi sebentar." }), {
       status: 502,
       headers: { "Content-Type": "application/json" },
     });

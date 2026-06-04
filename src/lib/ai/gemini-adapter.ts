@@ -23,6 +23,7 @@ import type {
 import { resolveDeepResearchAgent, resolveModel } from "./model-routing";
 import { withRetry } from "./retry";
 import { parseAndValidate } from "./schema-validate";
+import { isHttpUrl } from "./url-safety";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -127,13 +128,14 @@ export function groundingToCitations(metadata: GroundingMetadata | undefined): {
     if (segment === undefined) continue;
     for (const index of support.groundingChunkIndices ?? []) {
       const web = chunks[index]?.web;
-      if (web?.uri === undefined) continue;
+      const uri = web?.uri;
+      if (!isHttpUrl(uri)) continue; // drop non-http(s) (data:/javascript:/relative) citation URLs
       citations.push({
         claimText: segment.text,
         startIndex: segment.startIndex ?? 0,
         endIndex: segment.endIndex ?? 0,
-        sourceUrl: web.uri,
-        sourceTitle: web.title,
+        sourceUrl: uri,
+        sourceTitle: web?.title,
         confidence: "grounded",
       });
     }
@@ -143,7 +145,7 @@ export function groundingToCitations(metadata: GroundingMetadata | undefined): {
   const sources: { url: string; title?: string }[] = [];
   for (const chunk of chunks) {
     const url = chunk.web?.uri;
-    if (url === undefined || seen.has(url)) continue;
+    if (!isHttpUrl(url) || seen.has(url)) continue;
     seen.add(url);
     sources.push({ url, title: chunk.web?.title });
   }

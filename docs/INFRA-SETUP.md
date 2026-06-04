@@ -19,13 +19,34 @@ pnpm db:deploy     # prod: apply committed migrations only — never drops, no -
 Commit every generated migration and code-review its SQL. `db push` is allowed ONLY for throwaway local
 sketching against an empty DB. Existing logged-in users keep their data across schema changes this way.
 
+### First-time baseline (one-time, REQUIRED before the first `db:deploy`)
+The live VPS DB (`agentbuff_cofounder`) was originally created with `db push`, so its `_prisma_migrations`
+ledger is empty. Running `db:deploy` directly would try to re-create existing tables and **fail**. Mark the
+baseline migration as already-applied ONCE (this only writes the ledger — it does not touch your data):
+
+```bash
+node scripts/with-env.mjs pnpm exec prisma migrate resolve --applied 20260604000000_init
+node scripts/with-env.mjs pnpm exec prisma migrate status   # → "Database schema is up to date"
+```
+
+### Deploy/upgrade runbook (every release — order matters, never loses data)
+1. `pnpm db:status` — confirm the ledger is healthy (baseline applied).
+2. `pnpm db:deploy` — apply any new committed migrations (idempotent; never drops, no `--accept-data-loss`).
+3. Only then swap/restart the app code, so code never runs against an out-of-date schema.
+
+`migrate deploy` is safe to run repeatedly. **Never** `db push` this DB again.
+
+> **OAuth Dynamic-Client-Registration clients are ephemeral** (in-memory) and are lost on restart/redeploy.
+> MCP **personal access tokens (PATs) are durable** (Postgres-backed) — steer integrations to PATs; a DCR
+> client simply re-registers after a deploy. User data, BYOK credentials, and projects are fully durable.
+
 ## Core (already wired)
 | Var | Purpose | Fallback if unset |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL (Prisma). | In-memory repos (data resets on restart). |
 | `AUTH_SECRET` | Signs Auth.js sessions. Generate: `openssl rand -base64 32`. | Dev fallback (throws in production). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. See [AUTH-SETUP.md](AUTH-SETUP.md). | Guest signed-cookie sessions only. |
-| `BYOK_MASTER_KEY_BASE64` | Master key wrapping BYOK secrets (envelope encryption). 32 bytes base64. | Ephemeral key (throws in production). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in (**required** — login-only, no guest mode). See [AUTH-SETUP.md](AUTH-SETUP.md). | Sign-in unavailable (users can't log in). |
+| `BYOK_MASTER_KEY_BASE64` | Master key wrapping BYOK secrets (envelope encryption). 32 bytes base64. ⚠️ **NEVER change this in prod** — it is the ONLY key that can decrypt stored BYOK credentials; rotating it permanently bricks every user's linked AI key (no re-encryption migration exists yet). Back it up securely. | Ephemeral key (throws in production). |
 
 ## Object storage (brand images, rendered PDFs) — PRD §10.2, §9.4.7
 Default is **durable local disk** (`.data/storage`, zero setup). To use S3-compatible storage (MinIO, R2, AWS S3 — region `ap-southeast-2` per UU PDP):

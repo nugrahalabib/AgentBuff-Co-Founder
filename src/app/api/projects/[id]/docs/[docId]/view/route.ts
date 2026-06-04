@@ -8,6 +8,13 @@ import { renderDocumentHtml } from "@/server/docs/templates";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// This standalone HTML is built from LLM-filled (untrusted) slots. Even though templates.ts escapes every
+// slot, serve it under its OWN tight CSP so that, if escaping ever regressed, injected markup still cannot
+// beacon out (no connect-src), frame, or load remote scripts. Inline style + the print button are allowed.
+const DOC_CSP =
+  "default-src 'none'; img-src 'self' data: https:; style-src 'unsafe-inline'; font-src 'self' data:; " +
+  "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; docId: string }> }): Promise<Response> {
   const userId = await currentUserId(req);
   if (userId === null) return new Response("unauthorized", { status: 401 });
@@ -20,6 +27,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; doc
   if (doc === null || doc.projectId !== id) return new Response("not found", { status: 404 });
 
   return new Response(renderDocumentHtml(doc), {
-    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": DOC_CSP,
+    },
   });
 }

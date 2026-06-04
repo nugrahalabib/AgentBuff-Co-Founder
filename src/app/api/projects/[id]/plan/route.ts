@@ -42,7 +42,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (e instanceof ProviderError) {
       return NextResponse.json({ error: "Tautkan API key dulu di Pengaturan.", code: e.code }, { status: 400 });
     }
-    const message = e instanceof Error ? e.message : "Gagal menyusun plan.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Never echo raw adapter/provider/internal text to the client (§13.1). Fixed generic message.
+    return NextResponse.json({ error: "Gagal menyusun plan. Coba lagi sebentar." }, { status: 502 });
   }
 }

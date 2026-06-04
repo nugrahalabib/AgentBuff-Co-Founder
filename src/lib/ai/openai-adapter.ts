@@ -16,6 +16,7 @@ import type { Capabilities, Citation, Credential, DeepResearchHandle, GroundedRe
 import { resolveDeepResearchAgent, resolveModel } from "./model-routing";
 import { withRetry } from "./retry";
 import { parseAndValidate } from "./schema-validate";
+import { isHttpUrl } from "./url-safety";
 
 /**
  * Coerce a JSON Schema into OpenAI strict-mode form: every object gets additionalProperties:false and
@@ -111,7 +112,7 @@ export function extractMessage(data: OAResponse): { text: string; annotations: O
     if (item.type !== "message") continue;
     for (const content of item.content ?? []) {
       if (content.type === "refusal") {
-        throw new OpenAIApiError(`Model menolak permintaan: ${content.refusal ?? ""}`.trim(), 200, false);
+        throw new OpenAIApiError("Model menolak permintaan ini.", 200, false);
       }
       if (content.type === "output_text") {
         text += content.text ?? "";
@@ -131,7 +132,8 @@ export function annotationsToCitations(
   const seen = new Set<string>();
   const sources: { url: string; title?: string }[] = [];
   for (const annotation of annotations) {
-    if (annotation.type !== "url_citation" || annotation.url === undefined) continue;
+    // Only http(s) citation URLs are kept — drop data:/javascript:/relative so no unsafe link reaches the UI.
+    if (annotation.type !== "url_citation" || !isHttpUrl(annotation.url)) continue;
     const startIndex = annotation.start_index ?? 0;
     const endIndex = annotation.end_index ?? 0;
     citations.push({
@@ -188,7 +190,7 @@ export class OpenAIAdapter implements LLMProvider {
       }
       const data = (await res.json()) as OAResponse;
       if (data.error !== null && data.error !== undefined) {
-        throw new OpenAIApiError(data.error.message ?? "OpenAI mengembalikan error.", 200, false);
+        throw new OpenAIApiError("OpenAI mengembalikan error.", 200, false);
       }
       return data;
     });
@@ -344,7 +346,7 @@ export class OpenAIAdapter implements LLMProvider {
       }
       const data = (await res.json()) as { data?: { b64_json?: string }[]; error?: { message?: string } | null };
       if (data.error !== null && data.error !== undefined) {
-        throw new OpenAIApiError(data.error.message ?? "OpenAI mengembalikan error.", 200, false);
+        throw new OpenAIApiError("OpenAI mengembalikan error.", 200, false);
       }
       const b64 = data.data?.[0]?.b64_json;
       if (b64 === undefined) throw new OpenAIApiError("OpenAI tidak mengembalikan gambar.", 200, false);

@@ -6,6 +6,7 @@
 //   - Plaintext secrets are decrypted in-memory ONLY at call time, NEVER logged or persisted.
 //   - `fingerprint` lets us detect key change/duplication without storing the plaintext.
 
+import "server-only"; // BYOK key material — never bundle this into the browser (build-time guard)
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const ALGO = "aes-256-gcm";
@@ -78,12 +79,24 @@ export function encryptSecret(plaintext: string, master: MasterKeyProvider): str
   return Buffer.from(JSON.stringify(blob), "utf8").toString("base64");
 }
 
-/** Reverse of {@link encryptSecret}. Throws if the KEK is wrong or the blob was tampered with (GCM auth). */
+/**
+ * Reverse of {@link encryptSecret}. Throws if the KEK is wrong or the blob was tampered with (GCM auth).
+ *
+ * Dispatches on `blob.v` so that if the format ever evolves (e.g. a v2 adds a key-id for KEK rotation),
+ * THIS v1 decode path stays intact and existing ciphertext keeps decrypting across the upgrade — never
+ * a silent data loss. Add a `case 2:` here (and keep `case 1`) when introducing v2; do not remove v1.
+ */
 export function decryptSecret(envelope: string, master: MasterKeyProvider): string {
   const blob = JSON.parse(Buffer.from(envelope, "base64").toString("utf8")) as EnvelopeBlob;
-  const dek = gcmDecrypt(master.getKek(), fromB64(blob.dekIv), fromB64(blob.dekTag), fromB64(blob.wrappedDek));
-  const plaintext = gcmDecrypt(dek, fromB64(blob.iv), fromB64(blob.tag), fromB64(blob.data));
-  return plaintext.toString("utf8");
+  switch (blob.v) {
+    case 1: {
+      const dek = gcmDecrypt(master.getKek(), fromB64(blob.dekIv), fromB64(blob.dekTag), fromB64(blob.wrappedDek));
+      const plaintext = gcmDecrypt(dek, fromB64(blob.iv), fromB64(blob.tag), fromB64(blob.data));
+      return plaintext.toString("utf8");
+    }
+    default:
+      throw new Error(`Unsupported envelope version: ${String((blob as { v?: unknown }).v)}`);
+  }
 }
 
 /** Stable, non-reversible SHA-256 fingerprint of a secret (hex). Never store plaintext. PRD §13.1. */

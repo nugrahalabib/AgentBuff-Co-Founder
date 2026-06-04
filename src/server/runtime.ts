@@ -4,6 +4,7 @@
 //   • otherwise         → in-memory (zero-setup; data resets on restart).
 // Either way the services/registry are identical. Cached on globalThis for dev hot-reload. PRD §10.1.
 
+import "server-only"; // holds the master key + all repositories — never reachable from the client bundle
 import { randomUUID } from "node:crypto";
 import { LocalMasterKey } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";

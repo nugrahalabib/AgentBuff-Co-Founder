@@ -50,7 +50,7 @@ Where things live (target layout — see [docs/REPO-STRUCTURE.md](docs/REPO-STRU
 - **Module 6 — MCP Gateway:** Streamable-HTTP JSON-RPC, hashed bearer PAT auth, **granular per-tool scopes** (read/write), audit log, 9 tools, token mgmt UI.
 - **Cross-cutting:** BYOK usage/cost tracking (recording-registry decorator), UU PDP **data export + account erasure**, just-in-time **glossary**, ObjectStorage + JobQueue seams ([storage/](src/server/storage/), [jobs/](src/server/jobs/)).
 
-**Setup notes:** pnpm uses `node-linker=hoisted` ([.npmrc](.npmrc)) so Turbopack resolves on Windows; `next.config.ts` pins `turbopack.root`. Tailwind v4 (CSS-first). Prisma schema changes are pushed to the isolated VPS DB via `node scripts/with-env.mjs pnpm exec prisma db push` (loads `.env.local`).
+**Setup notes:** pnpm uses `node-linker=hoisted` ([.npmrc](.npmrc)) so Turbopack resolves on Windows; `next.config.ts` pins `turbopack.root`. Tailwind v4 (CSS-first). Prisma schema changes go through **versioned migrations** against the isolated VPS DB — `node scripts/with-env.mjs pnpm exec prisma migrate deploy` (loads `.env.local`). **Never `db push`** on a populated DB (drops data). See [docs/INFRA-SETUP.md](docs/INFRA-SETUP.md).
 
 **Remaining (infra/spec-completion, behind seams):** live BullMQ/Redis + S3 backends (in-memory seams exist); headless-Chromium server-side PDF worker (browser print works today); full OAuth 2.1 AS + DCR/PKCE (PAT bearer + scopes work today); MCP resources/prompts; Deep Research **Jalur A** (Interactions/Responses async agents — 501 stubs); context caching + Batch API; richer analytics. The I/O boundaries sit behind interfaces with in-memory/test impls; they go live when credentials/infra are provided.
 

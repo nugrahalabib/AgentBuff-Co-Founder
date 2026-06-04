@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { app } from "@/server/runtime";
 import { currentUserId, guardMutation } from "@/server/api-helpers";
+import { NO_STORE } from "@/server/http-guards";
 
 export async function POST(req: Request): Promise<Response> {
   const blocked = guardMutation(req);
@@ -32,6 +33,6 @@ export async function POST(req: Request): Promise<Response> {
 
 export async function GET(req: Request): Promise<Response> {
   const userId = await currentUserId(req);
-  if (userId === null) return NextResponse.json({ projects: [] });
-  return NextResponse.json({ projects: await app.projects.listForUser(userId) });
+  if (userId === null) return NextResponse.json({ projects: [] }, { headers: NO_STORE });
+  return NextResponse.json({ projects: await app.projects.listForUser(userId) }, { headers: NO_STORE });
 }
