@@ -68,7 +68,7 @@ export class CredentialService {
       const adapter = adapterFor(row.provider);
       let secret: string;
       try {
-        secret = decryptSecret(row.ciphertext, this.master);
+        secret = await decryptSecret(row.ciphertext, this.master);
       } catch {
         await this.store.patchMeta(userId, row.provider, { status: "invalid" });
         continue;

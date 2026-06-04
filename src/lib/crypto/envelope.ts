@@ -14,8 +14,11 @@ const KEY_LEN = 32; // 256-bit
 const IV_LEN = 12; // 96-bit nonce (GCM standard)
 
 export interface MasterKeyProvider {
-  /** Return the 32-byte KEK. Implementations: KMS/Vault in prod, env-derived in dev. */
-  getKek(): Buffer;
+  /**
+   * Return the 32-byte KEK. Async-capable so a KMS/Vault provider can fetch/decrypt it remotely
+   * (the plaintext root key never has to live in the app's env). LocalMasterKey returns it synchronously.
+   */
+  getKek(): Buffer | Promise<Buffer>;
 }
 
 /** Dev/test KEK provider backed by an in-memory 32-byte key (e.g. from a base64 env var). */
@@ -63,10 +66,10 @@ function gcmDecrypt(key: Buffer, iv: Buffer, tag: Buffer, ciphertext: Buffer): B
 const fromB64 = (s: string): Buffer => Buffer.from(s, "base64");
 
 /** Envelope-encrypt a secret → a single opaque base64 string suitable for `ByokCredential.ciphertext`. */
-export function encryptSecret(plaintext: string, master: MasterKeyProvider): string {
+export async function encryptSecret(plaintext: string, master: MasterKeyProvider): Promise<string> {
   const dek = randomBytes(KEY_LEN);
   const data = gcmEncrypt(dek, Buffer.from(plaintext, "utf8"));
-  const wrapped = gcmEncrypt(master.getKek(), dek);
+  const wrapped = gcmEncrypt(await master.getKek(), dek);
   const blob: EnvelopeBlob = {
     v: 1,
     wrappedDek: wrapped.ciphertext.toString("base64"),
@@ -86,11 +89,11 @@ export function encryptSecret(plaintext: string, master: MasterKeyProvider): str
  * THIS v1 decode path stays intact and existing ciphertext keeps decrypting across the upgrade — never
  * a silent data loss. Add a `case 2:` here (and keep `case 1`) when introducing v2; do not remove v1.
  */
-export function decryptSecret(envelope: string, master: MasterKeyProvider): string {
+export async function decryptSecret(envelope: string, master: MasterKeyProvider): Promise<string> {
   const blob = JSON.parse(Buffer.from(envelope, "base64").toString("utf8")) as EnvelopeBlob;
   switch (blob.v) {
     case 1: {
-      const dek = gcmDecrypt(master.getKek(), fromB64(blob.dekIv), fromB64(blob.dekTag), fromB64(blob.wrappedDek));
+      const dek = gcmDecrypt(await master.getKek(), fromB64(blob.dekIv), fromB64(blob.dekTag), fromB64(blob.wrappedDek));
       const plaintext = gcmDecrypt(dek, fromB64(blob.iv), fromB64(blob.tag), fromB64(blob.data));
       return plaintext.toString("utf8");
     }

@@ -15,7 +15,12 @@ export function authSecret(): string {
   return "dev-insecure-secret-change-me";
 }
 
-/** Base64 KEK for BYOK envelope encryption, or null (dev) to generate an ephemeral one. */
+/** True when a KMS-backed KEK is configured (an acceptable prod alternative to BYOK_MASTER_KEY_BASE64). */
+export function kmsConfigured(): boolean {
+  return (process.env.BYOK_KMS_KEY_ID ?? "") !== "" && (process.env.BYOK_KEK_CIPHERTEXT_B64 ?? "") !== "";
+}
+
+/** Base64 KEK for BYOK envelope encryption, or null (dev, or when KMS provides the KEK instead). */
 export function byokMasterKeyBase64(): string | null {
   const v = process.env.BYOK_MASTER_KEY_BASE64;
   if (v !== undefined && v.length > 0) {
@@ -25,9 +30,9 @@ export function byokMasterKeyBase64(): string | null {
     }
     return v;
   }
-  if (isProd) {
+  if (isProd && !kmsConfigured()) {
     throw new Error(
-      "BYOK_MASTER_KEY_BASE64 is required in production — a per-process random KEK would make all stored BYOK keys undecryptable after restart.",
+      "In production set BYOK_MASTER_KEY_BASE64 (32 bytes base64) OR configure KMS (BYOK_KMS_KEY_ID + BYOK_KEK_CIPHERTEXT_B64) — a per-process random KEK would make all stored BYOK keys undecryptable after restart.",
     );
   }
   return null;

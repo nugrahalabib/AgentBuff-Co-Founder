@@ -3,6 +3,7 @@
 // Session helpers that need Auth.js live in api-helpers.ts (which re-exports these for convenience).
 
 import { NextResponse } from "next/server";
+import { getRedis } from "@/server/redis";
 
 /** Header set for authenticated GETs that return per-user data — keeps PII out of proxy/bfcache/SW caches. */
 export const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -53,30 +54,45 @@ export function enforceBodyLimit(req: Request, maxBytes: number): NextResponse |
   return null;
 }
 
-/**
- * Minimal in-memory fixed-window rate limiter for auth-adjacent routes (PRD §13.2). Best-effort and
- * per-instance (resets on restart / not shared across serverless instances) — a deterrent against
- * runaway loops / key-validation oracles, not a hard quota. Returns a 429 response when over the cap,
- * else null (proceed). Replace with a Redis token-bucket when the BullMQ/Redis seam goes live.
- */
+/** Fixed-window rate limiter for auth-adjacent routes (PRD §13.2). Uses Redis when REDIS_URL is set
+ * (shared across instances — survives restarts + horizontal scaling), else a per-instance in-memory
+ * fallback. Returns a 429 response when over the cap, else null (proceed). This is an app-level deterrent
+ * against abuse / key-validation oracles, NOT DDoS protection — put a CDN/WAF (Cloudflare) in front for
+ * that. See docs/PRODUCTION-SECURITY.md. */
+const tooMany = (retrySec: number): NextResponse =>
+  NextResponse.json(
+    { error: "Terlalu banyak permintaan. Coba lagi sebentar." },
+    { status: 429, headers: { "Retry-After": String(Math.max(1, retrySec)) } },
+  );
+
 const rlBuckets =
   (globalThis as unknown as { __rlBuckets?: Map<string, { count: number; resetAt: number }> }).__rlBuckets ??
   ((globalThis as unknown as { __rlBuckets?: Map<string, { count: number; resetAt: number }> }).__rlBuckets = new Map());
 
-export function rateLimit(key: string, max: number, windowMs: number): NextResponse | null {
+function rateLimitMemory(key: string, max: number, windowMs: number): NextResponse | null {
   const now = Date.now();
   const b = rlBuckets.get(key);
   if (b === undefined || now >= b.resetAt) {
     rlBuckets.set(key, { count: 1, resetAt: now + windowMs });
     return null;
   }
-  if (b.count >= max) {
-    const retry = Math.max(1, Math.ceil((b.resetAt - now) / 1000));
-    return NextResponse.json(
-      { error: "Terlalu banyak permintaan. Coba lagi sebentar." },
-      { status: 429, headers: { "Retry-After": String(retry) } },
-    );
-  }
+  if (b.count >= max) return tooMany(Math.ceil((b.resetAt - now) / 1000));
   b.count += 1;
   return null;
+}
+
+export async function rateLimit(key: string, max: number, windowMs: number): Promise<NextResponse | null> {
+  try {
+    const redis = await getRedis();
+    if (redis !== null) {
+      const k = `rl:${key}`;
+      const count = await redis.incr(k);
+      if (count === 1) await redis.pexpire(k, windowMs);
+      if (count > max) return tooMany(Math.ceil((await redis.pttl(k)) / 1000));
+      return null;
+    }
+  } catch {
+    // Redis hiccup → fail open to the in-memory limiter rather than blocking legitimate users.
+  }
+  return rateLimitMemory(key, max, windowMs);
 }

@@ -112,11 +112,13 @@ export function CodexLoginButton({ onLinked }: { onLinked?: () => void }) {
         </p>
       )}
 
-      <p className="mt-3 rounded-lg bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground">
-        ⚠️ Login ChatGPT hanya berfungsi saat AgentBuff dijalankan di komputermu sendiri (mode lokal / self-host),
-        karena OpenAI hanya mengizinkan callback ke <code>localhost:1455</code>. Memakai sesi ChatGPT pribadi untuk
-        otomatisasi berada di area abu-abu ketentuan OpenAI — gunakan akunmu sendiri dengan bijak. Sesi tersimpan
-        terenkripsi & tak pernah ditampilkan.
+      <p className="mt-3 rounded-lg border border-amber-300/40 bg-amber-100/40 p-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-400/10 dark:text-amber-300">
+        ⚠️ <b>Risiko ditanggung sendiri.</b> Ini memakai <b>akun ChatGPT-mu sendiri</b> — sesi langgananmu yang
+        dipakai jadi mesin AI, bukan akun orang lain. Memakai sesi ChatGPT untuk otomatisasi berada di area abu-abu
+        ketentuan OpenAI, jadi <b>akunmu sendiri</b> berpotensi kena pembatasan/blokir oleh OpenAI — keputusan ada di
+        tanganmu. Kalau ragu, pakai API key Gemini/OpenAI saja. Login ini juga hanya berfungsi saat AgentBuff jalan di
+        komputermu sendiri (mode lokal/self-host; callback ke <code>localhost:1455</code>). Sesi disimpan terenkripsi
+        &amp; tak pernah ditampilkan.
       </p>
     </div>
   );

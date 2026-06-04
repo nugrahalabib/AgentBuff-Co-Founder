@@ -7,20 +7,20 @@ function fakeReq(headers: Record<string, string>): Request {
   return { headers: { get: (k: string) => lower[k.toLowerCase()] ?? null } } as unknown as Request;
 }
 
-describe("rateLimit", () => {
-  it("allows up to max within the window, then 429s", () => {
+describe("rateLimit (in-memory fallback when REDIS_URL unset)", () => {
+  it("allows up to max within the window, then 429s", async () => {
     const key = "rl-unit-allow-then-block";
-    expect(rateLimit(key, 2, 60_000)).toBeNull();
-    expect(rateLimit(key, 2, 60_000)).toBeNull();
-    const blocked = rateLimit(key, 2, 60_000);
+    expect(await rateLimit(key, 2, 60_000)).toBeNull();
+    expect(await rateLimit(key, 2, 60_000)).toBeNull();
+    const blocked = await rateLimit(key, 2, 60_000);
     expect(blocked).not.toBeNull();
     expect(blocked!.status).toBe(429);
     expect(blocked!.headers.get("Retry-After")).not.toBeNull();
   });
 
-  it("uses independent buckets per key", () => {
-    expect(rateLimit("rl-unit-key-A", 1, 60_000)).toBeNull();
-    expect(rateLimit("rl-unit-key-B", 1, 60_000)).toBeNull(); // different key → not affected
+  it("uses independent buckets per key", async () => {
+    expect(await rateLimit("rl-unit-key-A", 1, 60_000)).toBeNull();
+    expect(await rateLimit("rl-unit-key-B", 1, 60_000)).toBeNull(); // different key → not affected
   });
 });
 

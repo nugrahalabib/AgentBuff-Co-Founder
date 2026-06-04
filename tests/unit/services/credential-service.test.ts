@@ -22,12 +22,12 @@ const noCaps: Capabilities = {
   docAgentCli: false,
 };
 
-function cred(provider: ProviderId, secret: string, over: Partial<StoredCredential> = {}): StoredCredential {
+async function cred(provider: ProviderId, secret: string, over: Partial<StoredCredential> = {}): Promise<StoredCredential> {
   return {
     userId: "u1",
     provider,
     credType: "api_key",
-    ciphertext: encryptSecret(secret, master),
+    ciphertext: await encryptSecret(secret, master),
     fingerprint: `fp-${provider}`,
     capabilities: allCaps,
     isDefault: false,
@@ -47,10 +47,9 @@ afterEach(() => {
 
 describe("CredentialService.summary", () => {
   it("reports active state, default provider, and exposes no secrets", async () => {
-    const store = new InMemoryCredentialStore([
-      cred("gemini", "g", { isDefault: true }),
-      cred("openai", "o", { status: "invalid" }),
-    ]);
+    const store = new InMemoryCredentialStore(
+      await Promise.all([cred("gemini", "g", { isDefault: true }), cred("openai", "o", { status: "invalid" })]),
+    );
     const svc = new CredentialService(store, master);
     const s = await svc.summary("u1");
 
@@ -63,7 +62,7 @@ describe("CredentialService.summary", () => {
   });
 
   it("has no active default when all credentials are invalid", async () => {
-    const store = new InMemoryCredentialStore([cred("gemini", "g", { status: "invalid" })]);
+    const store = new InMemoryCredentialStore(await Promise.all([cred("gemini", "g", { status: "invalid" })]));
     const s = await new CredentialService(store, master).summary("u1");
     expect(s.hasActive).toBe(false);
     expect(s.defaultProvider).toBeNull();
@@ -72,10 +71,9 @@ describe("CredentialService.summary", () => {
 
 describe("CredentialService.setDefault / remove", () => {
   it("setDefault makes one provider default and demotes the rest", async () => {
-    const store = new InMemoryCredentialStore([
-      cred("gemini", "g", { isDefault: true }),
-      cred("openai", "o"),
-    ]);
+    const store = new InMemoryCredentialStore(
+      await Promise.all([cred("gemini", "g", { isDefault: true }), cred("openai", "o")]),
+    );
     const svc = new CredentialService(store, master);
     expect(await svc.setDefault("u1", "openai")).toBe(true);
     const s = await svc.summary("u1");
@@ -84,7 +82,7 @@ describe("CredentialService.setDefault / remove", () => {
   });
 
   it("remove unlinks a credential", async () => {
-    const store = new InMemoryCredentialStore([cred("gemini", "g")]);
+    const store = new InMemoryCredentialStore(await Promise.all([cred("gemini", "g")]));
     const svc = new CredentialService(store, master);
     expect(await svc.remove("u1", "gemini")).toBe(true);
     expect((await svc.summary("u1")).credentials).toHaveLength(0);
@@ -96,7 +94,7 @@ describe("CredentialService.revalidate", () => {
   it("marks a rejected key invalid and refreshes capabilities for a live key", async () => {
     // Gemini probe → 401 (rejected → invalid). validateCredential returns ok:false with empty caps.
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fakeResponse(401)));
-    const store = new InMemoryCredentialStore([cred("gemini", "g", { isDefault: true })]);
+    const store = new InMemoryCredentialStore(await Promise.all([cred("gemini", "g", { isDefault: true })]));
     const svc = new CredentialService(store, master);
     const s = await svc.revalidate("u1");
     expect(s.credentials[0]!.status).toBe("invalid");
@@ -107,7 +105,7 @@ describe("CredentialService.revalidate", () => {
   it("keeps the previous status on a transient provider outage (does not falsely invalidate)", async () => {
     // 503 → validateCredential throws a transient error → status must stay "active".
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fakeResponse(503)));
-    const store = new InMemoryCredentialStore([cred("gemini", "g", { isDefault: true, status: "active" })]);
+    const store = new InMemoryCredentialStore(await Promise.all([cred("gemini", "g", { isDefault: true, status: "active" })]));
     const svc = new CredentialService(store, master);
     const s = await svc.revalidate("u1");
     expect(s.credentials[0]!.status).toBe("active");

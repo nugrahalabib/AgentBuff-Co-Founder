@@ -6,7 +6,7 @@
 
 import "server-only"; // holds the master key + all repositories — never reachable from the client bundle
 import { randomUUID } from "node:crypto";
-import { LocalMasterKey } from "@/lib/crypto";
+import { KmsMasterKey, LocalMasterKey, type MasterKeyProvider } from "@/lib/crypto";
 import { InMemoryCredentialStore, type UpsertableCredentialStore } from "@/lib/ai/credential-store";
 import { DefaultProviderRegistry } from "@/lib/ai/registry";
 import type { ProviderRegistry } from "@/lib/ai/llm-provider";
@@ -38,7 +38,7 @@ import { createPrismaPersistence } from "@/server/db/prisma-repositories";
 import { byokMasterKeyBase64 } from "@/server/env";
 
 export interface AppRuntime {
-  master: LocalMasterKey;
+  master: MasterKeyProvider;
   credentials: UpsertableCredentialStore;
   registry: ProviderRegistry;
   usage: UsageRecorder;
@@ -70,8 +70,10 @@ export interface AppRuntime {
 }
 
 function createRuntime(): AppRuntime {
-  const masterB64 = byokMasterKeyBase64(); // throws in prod if unset
-  const master = masterB64 !== null ? LocalMasterKey.fromBase64(masterB64) : LocalMasterKey.generate();
+  // Prefer a KMS-backed KEK in prod (plaintext key never on this box); else the env/local KEK.
+  const masterB64 = byokMasterKeyBase64(); // throws in prod if unset (and no KMS)
+  const master: MasterKeyProvider =
+    KmsMasterKey.fromEnv() ?? (masterB64 !== null ? LocalMasterKey.fromBase64(masterB64) : LocalMasterKey.generate());
 
   const usePostgres = typeof process.env.DATABASE_URL === "string" && process.env.DATABASE_URL.length > 0;
 

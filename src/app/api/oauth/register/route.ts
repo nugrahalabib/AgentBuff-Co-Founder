@@ -13,7 +13,7 @@ export async function POST(req: Request): Promise<Response> {
   // size so an anonymous caller can't flood the in-memory client registry. (RL-001, DOS-005)
   const tooBig = enforceBodyLimit(req, 16 * 1024);
   if (tooBig !== null) return tooBig;
-  const limited = rateLimit(`oauth-register:${clientIp(req)}`, 20, 60_000);
+  const limited = await rateLimit(`oauth-register:${clientIp(req)}`, 20, 60_000);
   if (limited !== null) return limited;
 
   let body: { redirect_uris?: unknown; client_name?: unknown };

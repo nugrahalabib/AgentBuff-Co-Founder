@@ -25,7 +25,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Per-user throttle: a few login starts per minute (each binds the shared loopback). (RL-002)
-  const limited = rateLimit(`codex-start:${userId}`, 5, 60_000);
+  const limited = await rateLimit(`codex-start:${userId}`, 5, 60_000);
   if (limited !== null) return limited;
 
   try {

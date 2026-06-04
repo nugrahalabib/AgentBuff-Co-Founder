@@ -32,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Poll throttle: the UI polls every 2s; cap to avoid a tight loop hammering the endpoint. (RL-003)
-  const limited = rateLimit(`codex-status:${userId}`, 60, 60_000);
+  const limited = await rateLimit(`codex-status:${userId}`, 60, 60_000);
   if (limited !== null) return limited;
 
   // User-bound: only the account that started this login may poll/consume it (CDX-01).
@@ -78,7 +78,7 @@ export async function POST(req: Request): Promise<Response> {
     userId,
     provider: "openai_codex",
     credType: "oauth_token",
-    ciphertext: encryptSecret(serializeBundle(bundle), app.master),
+    ciphertext: await encryptSecret(serializeBundle(bundle), app.master),
     fingerprint: fingerprint(bundle.accessToken),
     capabilities,
     isDefault: wasDefault || !someoneElseIsDefault,

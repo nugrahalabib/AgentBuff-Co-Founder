@@ -21,7 +21,7 @@ export async function POST(req: Request): Promise<Response> {
   if (blocked !== null) return blocked;
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
-  const limited = rateLimit(`byok-validate:${userId}`, 10, 60_000);
+  const limited = await rateLimit(`byok-validate:${userId}`, 10, 60_000);
   if (limited !== null) return limited;
 
   let body: { provider?: string; apiKey?: string };

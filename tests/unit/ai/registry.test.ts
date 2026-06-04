@@ -14,16 +14,16 @@ const allCaps: Capabilities = {
   docAgentCli: true,
 };
 
-function cred(
+async function cred(
   provider: ProviderId,
   secret: string,
   over: Partial<StoredCredential> = {},
-): StoredCredential {
+): Promise<StoredCredential> {
   return {
     userId: "u1",
     provider,
     credType: "api_key",
-    ciphertext: encryptSecret(secret, master),
+    ciphertext: await encryptSecret(secret, master),
     fingerprint: "fp",
     capabilities: allCaps,
     isDefault: false,
@@ -34,10 +34,9 @@ function cred(
 
 describe("DefaultProviderRegistry.forTask", () => {
   it("uses the default provider for a task with no special capability, decrypting the secret", async () => {
-    const store = new InMemoryCredentialStore([
-      cred("gemini", "gemini-key"),
-      cred("openai", "openai-key", { isDefault: true }),
-    ]);
+    const store = new InMemoryCredentialStore(
+      await Promise.all([cred("gemini", "gemini-key"), cred("openai", "openai-key", { isDefault: true })]),
+    );
     const registry = new DefaultProviderRegistry(store, master);
 
     const { provider, cred: resolved } = await registry.forTask("u1", "reasoning_heavy");
@@ -46,10 +45,12 @@ describe("DefaultProviderRegistry.forTask", () => {
   });
 
   it("routes a capability-gated task to a provider that supports it, overriding the default", async () => {
-    const store = new InMemoryCredentialStore([
-      cred("gemini", "gemini-key"), // imageGen true
-      cred("openai", "openai-key", { isDefault: true, capabilities: { ...allCaps, imageGen: false } }),
-    ]);
+    const store = new InMemoryCredentialStore(
+      await Promise.all([
+        cred("gemini", "gemini-key"), // imageGen true
+        cred("openai", "openai-key", { isDefault: true, capabilities: { ...allCaps, imageGen: false } }),
+      ]),
+    );
     const registry = new DefaultProviderRegistry(store, master);
 
     const { provider } = await registry.forTask("u1", "image_gen");
@@ -57,7 +58,7 @@ describe("DefaultProviderRegistry.forTask", () => {
   });
 
   it("throws BYOK_KEY_MISSING when the user has no active credential", async () => {
-    const store = new InMemoryCredentialStore([cred("gemini", "g", { status: "revoked" })]);
+    const store = new InMemoryCredentialStore(await Promise.all([cred("gemini", "g", { status: "revoked" })]));
     const registry = new DefaultProviderRegistry(store, master);
     await expect(registry.forTask("u1", "reasoning_heavy")).rejects.toMatchObject({
       code: "BYOK_KEY_MISSING",
@@ -65,9 +66,11 @@ describe("DefaultProviderRegistry.forTask", () => {
   });
 
   it("throws NO_PROVIDER_FOR_TASK when no linked provider has the capability", async () => {
-    const store = new InMemoryCredentialStore([
-      cred("openai", "openai-key", { isDefault: true, capabilities: { ...allCaps, imageGen: false } }),
-    ]);
+    const store = new InMemoryCredentialStore(
+      await Promise.all([
+        cred("openai", "openai-key", { isDefault: true, capabilities: { ...allCaps, imageGen: false } }),
+      ]),
+    );
     const registry = new DefaultProviderRegistry(store, master);
     await expect(registry.forTask("u1", "image_gen")).rejects.toBeInstanceOf(ProviderError);
   });

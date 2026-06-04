@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
   if (blocked !== null) return blocked;
   const userId = await currentUserId(req);
   if (userId === null) return NextResponse.json({ error: "Masuk dulu dengan Google." }, { status: 401 });
-  const limited = rateLimit(`byok-link:${userId}`, 10, 60_000);
+  const limited = await rateLimit(`byok-link:${userId}`, 10, 60_000);
   if (limited !== null) return limited;
 
   let body: { provider?: string; apiKey?: string };
@@ -61,7 +61,7 @@ export async function POST(req: Request): Promise<Response> {
     userId,
     provider: provider as ValidatableProvider,
     credType,
-    ciphertext: encryptSecret(apiKey, app.master),
+    ciphertext: await encryptSecret(apiKey, app.master),
     fingerprint: fingerprint(apiKey),
     capabilities: result.capabilities,
     isDefault: true,

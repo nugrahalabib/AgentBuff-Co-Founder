@@ -6,3 +6,4 @@ export {
   LocalMasterKey,
   type MasterKeyProvider,
 } from "./envelope";
+export { KmsMasterKey } from "./kms-master-key";

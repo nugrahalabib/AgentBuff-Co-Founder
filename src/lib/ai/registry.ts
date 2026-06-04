@@ -94,7 +94,7 @@ export class DefaultProviderRegistry implements ProviderRegistry {
 
   /** Decrypt the stored secret; for Codex, parse the token bundle and proactively refresh + re-persist. */
   private async resolveSecret(chosen: StoredCredential): Promise<{ secret: string; accountId?: string }> {
-    const decrypted = decryptSecret(chosen.ciphertext, this.master);
+    const decrypted = await decryptSecret(chosen.ciphertext, this.master);
     if (!(chosen.credType === "oauth_token" && chosen.provider === "openai_codex")) {
       return { secret: decrypted };
     }
@@ -117,7 +117,7 @@ export class DefaultProviderRegistry implements ProviderRegistry {
           try {
             await store.upsert({
               ...chosen,
-              ciphertext: encryptSecret(serializeBundle(refreshed), this.master),
+              ciphertext: await encryptSecret(serializeBundle(refreshed), this.master),
               fingerprint: fingerprint(refreshed.accessToken),
             });
           } catch {
