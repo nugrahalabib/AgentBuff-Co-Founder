@@ -58,6 +58,20 @@ returns 503 and users use the in-browser **Cetak / Simpan PDF** (always availabl
 Jalur A runs on the user's BYOK key (Gemini Interactions / OpenAI Responses background). The always-available
 **Jalur B** custom grounded pipeline needs no extra config.
 
+## Model IDs (override without code) — PRD §12.2
+Defaults live in `src/lib/ai/model-routing.ts` (cross-checked 2026-06). If any default model name is wrong
+or gets deprecated (live calls 404), override it via env — **no code change**:
+```
+MODEL_<TASK>_<PROVIDER>=<model-id>
+# e.g.
+MODEL_REASONING_HEAVY_GEMINI=gemini-3-pro
+MODEL_GROUNDED_LIGHT_GEMINI=gemini-flash-latest
+MODEL_IMAGE_GEN_OPENAI=gpt-image-1
+```
+Tasks: `parse_fast`, `grounded_light`, `reasoning_heavy`, `deep_research`, `image_gen`, `vision`,
+`doc_understanding`. Providers: `GEMINI`, `OPENAI`. Verify the exact current ids in the Gemini/OpenAI
+console when you link your BYOK key.
+
 ## MCP gateway auth
 Tokens (PAT, hashed) work out of the box. For OAuth 2.1 clients, discovery is automatic via
 `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`; clients self-register

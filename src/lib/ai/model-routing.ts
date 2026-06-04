@@ -2,10 +2,11 @@
 // SINGLE place where model IDs live. PRD §12.2, §12.14.5.
 //
 // ⚠️ DO NOT hardcode model names anywhere else in the codebase.
-// ⚠️ VERIFY every string below against the official model lists BEFORE production:
-//      Gemini: https://ai.google.dev/gemini-api/docs/models  (+ Deprecations)
-//      OpenAI: https://developers.openai.com/api/docs/models
-//    Values here are placeholders captured 2026-05-30 and WILL change. Treat as config.
+// ⚠️ Defaults below are sane current values (cross-checked via context7, 2026-06), but model names move.
+//    EVERY id is overridable at runtime with NO code change via an env var:
+//        MODEL_<TASK>_<PROVIDER>   e.g. MODEL_REASONING_HEAVY_GEMINI=gemini-3-pro
+//                                       MODEL_IMAGE_GEN_OPENAI=gpt-image-1
+//    So if a default ever 404s, set the right id in .env.local. See docs/INFRA-SETUP.md.
 
 import type { ProviderId, TaskClass } from "./types";
 
@@ -29,8 +30,8 @@ export const MODEL_ROUTING: Record<TaskClass, Routing> = {
     openai: "gpt-5.5",                    // reasoning.effort = high
   },
   image_gen: {
-    gemini: "nano-banana-pro",            // verify exact id (or Imagen for photoreal)
-    openai: "gpt-image-2",                // requires Org Verification
+    gemini: "gemini-3-pro-image-preview", // Nano Banana Pro (Gemini 3 Pro Image) — confirmed 2026-06
+    openai: "gpt-image-1",                // GPT Image (requires Org Verification)
   },
   vision: {
     gemini: "gemini-flash",
@@ -52,8 +53,15 @@ export const API_NOTES = {
   openaiResponses: { endpoint: "https://api.openai.com/v1/responses", authHeader: "Authorization: Bearer" },
 } as const;
 
+/** Env override for a task×provider model id, or undefined. e.g. MODEL_IMAGE_GEN_GEMINI. */
+function envOverride(task: TaskClass, provider: ProviderId): string | undefined {
+  const key = `MODEL_${task.toUpperCase()}_${provider.toUpperCase()}`;
+  const v = process.env[key];
+  return v !== undefined && v.length > 0 ? v : undefined;
+}
+
 export function resolveModel(task: TaskClass, provider: ProviderId): string | undefined {
-  return MODEL_ROUTING[task]?.[provider];
+  return envOverride(task, provider) ?? MODEL_ROUTING[task]?.[provider];
 }
 
 /** Reverse lookup: which provider owns a given model id (single source of truth). */
